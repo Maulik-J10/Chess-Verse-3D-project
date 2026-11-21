@@ -57,6 +57,10 @@ interface GameState {
   showHints: boolean;
   showLegalMoves: boolean;
   graphicsQuality: GraphicsQuality;
+  showPerfOverlay: boolean;
+  isMobile: boolean;
+  isMoveHistoryOpen: boolean;
+  isCameraDrawerOpen: boolean;
 
   // Game Result
   gameResult: {
@@ -96,6 +100,13 @@ interface GameState {
   flipBoard: () => void;
   setHistoryIndex: (index: number) => void;
   setGraphicsQuality: (quality: GraphicsQuality) => void;
+  togglePerfOverlay: () => void;
+  toggleMoveHistory: () => void;
+  setMoveHistoryOpen: (open: boolean) => void;
+  toggleCameraDrawer: () => void;
+  setCameraDrawerOpen: (open: boolean) => void;
+  adaptiveQualityDegrade: () => void;
+  setIsMobile: (isMobile: boolean) => void;
   toggleSound: () => void;
   toggleHints: () => void;
   toggleLegalMoves: () => void;
@@ -106,6 +117,15 @@ interface GameState {
 }
 
 const chessController = new ChessLogicController();
+
+export const checkIsMobile = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.innerWidth <= 768 ||
+    window.matchMedia('(pointer: coarse)').matches ||
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+  );
+};
 
 export const useGameStore = create<GameState>((set, get) => {
   // Listen for engine moves in AI mode
@@ -153,7 +173,11 @@ export const useGameStore = create<GameState>((set, get) => {
     soundEnabled: true,
     showHints: true,
     showLegalMoves: true,
-    graphicsQuality: 'high',
+    graphicsQuality: checkIsMobile() ? 'medium' : 'high',
+    showPerfOverlay: false,
+    isMobile: checkIsMobile(),
+    isMoveHistoryOpen: false,
+    isCameraDrawerOpen: false,
 
     gameResult: null,
 
@@ -623,6 +647,18 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     setGraphicsQuality: (quality) => set({ graphicsQuality: quality }),
+    togglePerfOverlay: () => set((s) => ({ showPerfOverlay: !s.showPerfOverlay })),
+    toggleMoveHistory: () => set((s) => ({ isMoveHistoryOpen: !s.isMoveHistoryOpen })),
+    setMoveHistoryOpen: (open) => set({ isMoveHistoryOpen: open }),
+    toggleCameraDrawer: () => set((s) => ({ isCameraDrawerOpen: !s.isCameraDrawerOpen })),
+    setCameraDrawerOpen: (open) => set({ isCameraDrawerOpen: open }),
+    setIsMobile: (mobile) => set({ isMobile: mobile }),
+    adaptiveQualityDegrade: () => {
+      const q = get().graphicsQuality;
+      if (q === 'ultra') set({ graphicsQuality: 'high' });
+      else if (q === 'high') set({ graphicsQuality: 'medium' });
+      else if (q === 'medium') set({ graphicsQuality: 'low' });
+    },
 
     toggleSound: () => {
       const muted = soundManager.getMuted();

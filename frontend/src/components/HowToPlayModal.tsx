@@ -10,8 +10,8 @@ export const HowToPlayModal: React.FC<HowToPlayModalProps> = ({ isOpen, onClose 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-      <div className="relative w-full max-w-2xl bg-[#f7f7f4] border border-[#c6a45c]/40 rounded-3xl p-6 sm:p-8 shadow-2xl text-[#202226] max-h-[85vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 animate-fade-in">
+      <div className="relative w-full max-w-2xl bg-[#f7f7f4] border border-[#c6a45c]/40 rounded-3xl p-4 sm:p-8 shadow-2xl text-[#202226] max-h-[90dvh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-[#c6a45c]/20 mb-5 sticky top-0 bg-[#f7f7f4]/95 backdrop-blur z-10">
           <div className="flex items-center gap-2">

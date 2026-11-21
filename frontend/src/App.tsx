@@ -8,6 +8,7 @@ import { PawnPromotionModal } from './components/PawnPromotionModal';
 import { SettingsModal } from './components/SettingsModal';
 import { HowToPlayModal } from './components/HowToPlayModal';
 import { Preloader } from './components/Preloader';
+import { PerformanceOverlay } from './components/PerformanceOverlay';
 import { useGameStore } from './store/gameStore';
 
 export const App: React.FC = () => {
@@ -41,6 +42,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Overlays and Modals */}
+      <PerformanceOverlay />
       <PawnPromotionModal />
       <GameResult />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />

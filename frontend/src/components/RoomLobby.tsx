@@ -94,8 +94,8 @@ export const RoomLobby: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="relative w-full max-w-lg bg-[#f7f7f4] border border-[#c6a45c]/40 rounded-3xl p-6 sm:p-8 shadow-2xl text-[#202226]">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4">
+      <div className="relative w-full max-w-lg bg-[#f7f7f4] border border-[#c6a45c]/40 rounded-3xl p-5 sm:p-8 shadow-2xl text-[#202226] max-h-[90dvh] overflow-y-auto">
         {/* Back Button */}
         <button
           onClick={() => {

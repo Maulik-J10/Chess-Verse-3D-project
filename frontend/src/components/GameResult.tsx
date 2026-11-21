@@ -33,8 +33,8 @@ export const GameResult: React.FC = () => {
   if (!gameResult || !gameResult.isOver) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-      <div className="relative w-full max-w-md bg-[#f7f7f4] border border-[#c6a45c]/40 rounded-3xl p-6 sm:p-8 shadow-2xl text-center text-[#202226]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 animate-fade-in">
+      <div className="relative w-full max-w-md bg-[#f7f7f4] border border-[#c6a45c]/40 rounded-3xl p-5 sm:p-8 shadow-2xl text-center text-[#202226] max-h-[90dvh] overflow-y-auto">
         {/* Result Icon */}
         <div className="mb-4 inline-flex items-center justify-center">
           {isWinner ? (

@@ -9,7 +9,7 @@ const WhiteKingFigure = memo(() => (
   <div className="flex flex-col items-center animate-fade-in pointer-events-none select-none">
     <div className="relative drop-shadow-[0_10px_25px_rgba(212,175,55,0.25)]">
       <svg
-        className="w-24 h-40 sm:w-32 sm:h-56 filter drop-shadow-md"
+        className="w-14 h-24 sm:w-32 sm:h-56 filter drop-shadow-md"
         viewBox="0 0 100 160"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
@@ -83,7 +83,7 @@ const BlackKingFigure = memo(() => (
   <div className="flex flex-col items-center animate-fade-in pointer-events-none select-none">
     <div className="relative drop-shadow-[0_10px_25px_rgba(0,0,0,0.6)]">
       <svg
-        className="w-24 h-40 sm:w-32 sm:h-56 filter drop-shadow-md"
+        className="w-14 h-24 sm:w-32 sm:h-56 filter drop-shadow-md"
         viewBox="0 0 100 160"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
@@ -196,26 +196,26 @@ export const Preloader: React.FC<PreloaderProps> = ({ onFinish }) => {
       }}
     >
       {/* Central Brand Container with Two Flanking Kings */}
-      <div className="relative flex items-center justify-center gap-6 sm:gap-14 max-w-4xl px-4 w-full">
+      <div className="relative flex items-center justify-center gap-2 sm:gap-14 max-w-4xl px-2 sm:px-4 w-full">
         {/* ================= LEFT: MAJESTIC WHITE KING ================= */}
         <WhiteKingFigure />
 
         {/* ================= CENTER: TITLE & PROGRESS ================= */}
-        <div className="flex flex-col items-center text-center px-2 z-10">
+        <div className="flex flex-col items-center text-center px-1 sm:px-2 z-10 min-w-0">
           {/* Royal Insignia Badge */}
-          <div className="flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#181613] border border-[#c6a45c]/40 text-[#c6a45c] text-[10px] font-serif font-bold tracking-[0.25em] uppercase mb-4 shadow-sm">
+          <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-0.5 sm:px-3.5 sm:py-1 rounded-full bg-[#181613] border border-[#c6a45c]/40 text-[#c6a45c] text-[9px] sm:text-[10px] font-serif font-bold tracking-[0.2em] sm:tracking-[0.25em] uppercase mb-2 sm:mb-4 shadow-sm">
             <span className="text-[#fae19d]">✦</span>
             <span>ROYAL 3D CHESS</span>
             <span className="text-[#fae19d]">✦</span>
           </div>
 
           {/* Game Title: ChessVerse3D */}
-          <h1 className="text-4xl sm:text-6xl font-serif font-black tracking-wider text-white mb-2 drop-shadow-[0_4px_20px_rgba(200,160,70,0.35)]">
+          <h1 className="text-2xl sm:text-6xl font-serif font-black tracking-wider text-white mb-1 sm:mb-2 drop-shadow-[0_4px_20px_rgba(200,160,70,0.35)] truncate">
             Chess<span className="text-transparent bg-clip-text bg-gradient-to-r from-[#cca044] via-[#fae19d] to-[#caa048]">Verse</span><span className="text-[#fff4d1]">3D</span>
           </h1>
 
           {/* Subtitle */}
-          <p className="text-xs sm:text-sm font-serif italic text-[#a39c8f] tracking-[0.2em] uppercase mb-8">
+          <p className="text-[10px] sm:text-sm font-serif italic text-[#a39c8f] tracking-[0.12em] sm:tracking-[0.2em] uppercase mb-4 sm:mb-8 max-w-[280px] sm:max-w-none">
             "Think Beyond The Board. See Beyond The Move."
           </p>
 

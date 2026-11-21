@@ -256,7 +256,6 @@ const WallArtwork: React.FC<WallArtworkProps> = ({
         angle={0.58}
         penumbra={0.65}
         distance={7.5}
-        castShadow
       />
     </group>
   );
@@ -340,7 +339,6 @@ const ChessMetalArtwork: React.FC<CornerArtworkProps> = ({
         angle={0.62}
         penumbra={0.7}
         distance={8.0}
-        castShadow
       />
     </group>
   );
@@ -435,7 +433,6 @@ const KingOilPaintingArtwork: React.FC<CornerArtworkProps> = ({
         angle={0.58}
         penumbra={0.65}
         distance={8.0}
-        castShadow
       />
     </group>
   );
@@ -512,7 +509,6 @@ const ChessSplatterArtwork: React.FC<CornerArtworkProps> = ({
         angle={0.62}
         penumbra={0.7}
         distance={8.0}
-        castShadow
       />
     </group>
   );
@@ -607,7 +603,6 @@ const TwoKingsArtwork: React.FC<CornerArtworkProps> = ({
         angle={0.58}
         penumbra={0.65}
         distance={8.0}
-        castShadow
       />
     </group>
   );
@@ -1256,7 +1251,6 @@ const ArchitecturalChandelier: React.FC = () => {
         angle={1.1}
         penumbra={0.8}
         distance={16}
-        castShadow
       />
       <spotLight
         ref={lowerSpotRef}
@@ -1270,6 +1264,7 @@ const ArchitecturalChandelier: React.FC = () => {
         castShadow
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
+        shadow-bias={-0.0003}
       />
     </group>
   );
@@ -2030,6 +2025,50 @@ export const RoomEnvironment: React.FC = () => {
         rotation={[0, Math.PI, 0]}
         width={2.45}
         height={3.0}
+      />
+
+      {/* =====================================================================
+          TWO CORNER GALLERY ARTWORKS IN NORTH-EAST CORNER
+          The corner visible in the user's screenshot (blank walls meeting under chandelier).
+          - North Wall (facing +Z): King Oil Painting (colorful expressionist)
+          - East Wall (facing -X): Chess Metal Art (black silhouettes)
+          ===================================================================== */}
+      {/* 1. North Wall of NE corner (facing +Z) */}
+      <KingOilPaintingArtwork
+        position={[10.6, 4.9, -15.86]}
+        rotation={[0, 0, 0]}
+        width={2.3}
+        height={3.18}
+      />
+
+      {/* 2. East Wall of NE corner (facing -X) */}
+      <ChessMetalArtwork
+        position={[15.86, 4.9, -10.6]}
+        rotation={[0, -Math.PI / 2, 0]}
+        width={3.4}
+        height={2.7}
+      />
+
+      {/* =====================================================================
+          TWO CORNER GALLERY ARTWORKS IN SOUTH-WEST CORNER
+          Diagonally opposite to NE corner.
+          - South Wall (facing -Z): Two Kings Fine Art Oil Painting
+          - West Wall (facing +X): Chess Splatter Watercolor Art
+          ===================================================================== */}
+      {/* 1. South Wall of SW corner (facing -Z) */}
+      <TwoKingsArtwork
+        position={[-10.6, 4.9, 15.86]}
+        rotation={[0, Math.PI, 0]}
+        width={2.45}
+        height={3.0}
+      />
+
+      {/* 2. West Wall of SW corner (facing +X) */}
+      <ChessSplatterArtwork
+        position={[-15.86, 4.9, 10.6]}
+        rotation={[0, Math.PI / 2, 0]}
+        width={2.8}
+        height={2.8}
       />
     </group>
   );

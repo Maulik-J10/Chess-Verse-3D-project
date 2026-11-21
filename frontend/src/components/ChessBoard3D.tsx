@@ -16,6 +16,7 @@ const captureRingGeo = typeof document !== 'undefined' ? new THREE.RingGeometry(
 
 export const ChessBoard3D: React.FC = () => {
   const boardGroupRef = useRef<THREE.Group>(null);
+  const pointerDownPosRef = useRef<Map<string, { x: number; y: number; time: number }>>(new Map());
 
   const pieces = useGameStore((s) => s.pieces);
   const selectedSquare = useGameStore((s) => s.selectedSquare);
@@ -109,6 +110,26 @@ export const ChessBoard3D: React.FC = () => {
                   receiveShadow
                   geometry={tileBoxGeo || undefined}
                   material={isDark ? darkSquareMat : lightSquareMat}
+                  onPointerDown={(e) => {
+                    pointerDownPosRef.current.set(square, {
+                      x: e.clientX,
+                      y: e.clientY,
+                      time: performance.now(),
+                    });
+                  }}
+                  onPointerUp={(e) => {
+                    const start = pointerDownPosRef.current.get(square);
+                    if (start) {
+                      pointerDownPosRef.current.delete(square);
+                      const dx = e.clientX - start.x;
+                      const dy = e.clientY - start.y;
+                      const dt = performance.now() - start.time;
+                      if (Math.hypot(dx, dy) < 14 && dt < 500) {
+                        e.stopPropagation();
+                        selectSquare(square);
+                      }
+                    }
+                  }}
                   onClick={(e) => {
                     e.stopPropagation();
                     selectSquare(square);

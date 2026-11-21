@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
 import { CameraPreset } from '../chess/types';
 
-// Preset Camera Coordinates calibrated for Grand Chess Room
+// Preset Camera Coordinates calibrated for Grand Chess Room (Desktop baseline)
 const PRESET_CONFIGS: Record<
   CameraPreset,
   { pos: [number, number, number]; target: [number, number, number] }
@@ -40,17 +40,30 @@ const PRESET_CONFIGS: Record<
 
 export const CameraController: React.FC = () => {
   const controlsRef = useRef<OrbitControlsImpl>(null);
-  const { camera } = useThree();
+  const { camera, size } = useThree();
 
   const cameraPreset = useGameStore((s) => s.cameraPreset);
   const isFlipped = useGameStore((s) => s.isFlipped);
+  const isMobile = useGameStore((s) => s.isMobile);
+
+  // Calculate dynamic aspect ratio and portrait distance factor
+  const aspect = size.width / Math.max(size.height, 1);
+  const isPortrait = aspect < 1.0;
+
+  // Responsive distance multiplier so all 64 squares fit inside the narrower viewport
+  // On desktop (aspect >= 1.0), distanceFactor is strictly 1.0 preserving desktop visuals
+  const distanceFactor = useMemo(() => {
+    if (!isPortrait) return 1.0;
+    // For portrait phones (aspect 0.45 - 0.75), calculate exact distance needed to frame board
+    return Math.min(2.1, Math.max(1.15, 0.92 / Math.max(aspect, 0.42)));
+  }, [isPortrait, aspect]);
 
   // Target positions for smooth lerping
   const targetPosRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 4.3, 7.8));
   const targetLookRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 1.8, 0));
   const isTransitioningRef = useRef(false);
 
-  // When cameraPreset changes, trigger transition
+  // When cameraPreset, isFlipped, or orientation aspect changes, recalculate target
   useEffect(() => {
     let cfg = PRESET_CONFIGS[cameraPreset] || PRESET_CONFIGS.front;
 
@@ -59,10 +72,32 @@ export const CameraController: React.FC = () => {
       else if (cameraPreset === 'black') cfg = PRESET_CONFIGS.white;
     }
 
-    targetPosRef.current.set(...cfg.pos);
-    targetLookRef.current.set(...cfg.target);
+    // Apply responsive mobile distance scaling
+    if (cameraPreset === 'top') {
+      targetPosRef.current.set(cfg.pos[0], cfg.pos[1] * distanceFactor, cfg.pos[2]);
+      targetLookRef.current.set(cfg.target[0], cfg.target[1], cfg.target[2]);
+    } else if (cameraPreset === 'cinematic') {
+      targetPosRef.current.set(
+        cfg.pos[0] * (isPortrait ? 1.3 : 1.0),
+        cfg.pos[1] * (isPortrait ? 1.2 : 1.0),
+        cfg.pos[2] * (isPortrait ? 1.3 : 1.0)
+      );
+      targetLookRef.current.set(cfg.target[0], cfg.target[1], cfg.target[2]);
+    } else {
+      targetPosRef.current.set(
+        cfg.pos[0],
+        cfg.pos[1] * (isPortrait ? 1.08 * distanceFactor : 1.0),
+        cfg.pos[2] * distanceFactor
+      );
+      targetLookRef.current.set(
+        cfg.target[0],
+        cfg.target[1] * (isPortrait ? 0.95 : 1.0),
+        cfg.target[2]
+      );
+    }
+
     isTransitioningRef.current = true;
-  }, [cameraPreset, isFlipped]);
+  }, [cameraPreset, isFlipped, distanceFactor, isPortrait]);
 
   useFrame((state, delta) => {
     if (!controlsRef.current) return;
@@ -70,8 +105,8 @@ export const CameraController: React.FC = () => {
     // Cinematic continuous slow panoramic sweep around the gallery
     if (cameraPreset === 'cinematic') {
       const t = state.clock.getElapsedTime() * 0.12;
-      const radius = 8.5;
-      const height = 4.2 + Math.sin(t * 0.5) * 0.5;
+      const radius = 8.5 * (isPortrait ? 1.25 : 1.0);
+      const height = (4.2 + Math.sin(t * 0.5) * 0.5) * (isPortrait ? 1.2 : 1.0);
       camera.position.x = Math.sin(t) * radius;
       camera.position.z = Math.cos(t) * radius;
       camera.position.y = height;
@@ -101,13 +136,18 @@ export const CameraController: React.FC = () => {
       ref={controlsRef}
       makeDefault
       enableDamping
-      dampingFactor={0.06}
-      minDistance={3.2}
-      maxDistance={11.0} // Prevents clipping outside room walls
+      dampingFactor={0.07}
+      minDistance={3.2 * (isPortrait ? 1.25 : 1.0)}
+      maxDistance={12.5} // Prevents clipping outside room walls
       minPolarAngle={0.22} // Allows looking smoothly up towards the chandeliers and ceiling
       maxPolarAngle={1.54} // Locks at floor level; camera never penetrates floor
       enablePan={false} // Smooth locked orbital rotation around center of chessboard
-      rotateSpeed={0.8}
+      rotateSpeed={isMobile ? 0.6 : 0.8}
+      zoomSpeed={0.8}
+      touches={{
+        ONE: THREE.TOUCH.ROTATE,
+        TWO: THREE.TOUCH.DOLLY_PAN,
+      }}
     />
   );
 };

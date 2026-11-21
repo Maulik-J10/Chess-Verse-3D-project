@@ -18,7 +18,9 @@ import {
   Bot, 
   Copy, 
   Check,
-  Camera
+  Camera,
+  History,
+  X
 } from 'lucide-react';
 import { CameraPreset } from '../chess/types';
 
@@ -30,6 +32,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
   const [showResignConfirm, setShowResignConfirm] = useState(false);
   const [showNewGameConfirm, setShowNewGameConfirm] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [showMobileHistory, setShowMobileHistory] = useState(false);
+  const [showMobileCamera, setShowMobileCamera] = useState(false);
 
   // Store selections
   const gameMode = useGameStore((s) => s.gameMode);
@@ -79,9 +83,12 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
   ];
 
   return (
-    <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3 sm:p-5 select-none z-20">
-      {/* ================= TOP BAR ================= */}
-      <header className="pointer-events-auto flex items-center justify-between gap-3 w-full max-w-6xl mx-auto">
+    <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-2 sm:p-5 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] select-none z-20 overflow-hidden">
+      
+      {/* ============================================================== */}
+      {/* TOP BAR (DESKTOP & TABLET: md+) */}
+      {/* ============================================================== */}
+      <header className="pointer-events-auto hidden md:flex items-center justify-between gap-3 w-full max-w-6xl mx-auto">
         {/* Game Mode & Title Badge */}
         <div className="flex items-center gap-3 bg-[#f7f7f4]/95 backdrop-blur-md px-4 py-2 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
           <button
@@ -90,7 +97,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
             title="Return to Main Menu"
           >
             <Home className="w-4 h-4 text-[#c6a45c]" />
-            <span className="hidden sm:inline font-serif font-bold text-[#202226]">CHESSVERSE3D</span>
+            <span className="font-serif font-bold text-[#202226]">CHESSVERSE3D</span>
           </button>
 
           <span className="w-px h-4 bg-[#d6d6d2]" />
@@ -172,8 +179,95 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
         </div>
       </header>
 
-      {/* ================= MIDDLE WORKSPACE (PLAYERS & PANELS) ================= */}
-      <div className="pointer-events-none flex items-start justify-between w-full max-w-6xl mx-auto my-auto gap-4">
+      {/* ============================================================== */}
+      {/* TOP BAR (MOBILE: < md) — COMPACT, ZERO BOARD OCCLUSION */}
+      {/* ============================================================== */}
+      <div className="pointer-events-auto flex md:hidden flex-col gap-1.5 w-full">
+        {/* Navigation & Controls Row */}
+        <div className="flex items-center justify-between gap-2 bg-[#f7f7f4]/95 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
+          <button
+            onClick={returnToMenu}
+            className="flex items-center gap-1 text-xs text-[#202226] font-serif font-bold p-1 cursor-pointer"
+            title="Return to Menu"
+          >
+            <Home className="w-4 h-4 text-[#c6a45c]" />
+            <span className="text-[11px] tracking-wide">MENU</span>
+          </button>
+
+          {/* Turn indicator */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/90 border border-[#c6a45c]/30 text-[11px] font-serif font-bold">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                turn === 'w' ? 'bg-white border border-[#999]' : 'bg-[#202226]'
+              }`}
+            />
+            <span className={isMyTurn ? 'text-[#c6a45c]' : 'text-[#666762]'}>
+              {isThinking ? 'AI Thinking...' : isMyTurn ? 'Your Turn' : "Enemy's Turn"}
+            </span>
+          </div>
+
+          {/* Quick Action Icons */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowMobileCamera(true)}
+              className="p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer"
+              title="Camera View"
+            >
+              <Camera className="w-3.5 h-3.5 text-[#c6a45c]" />
+            </button>
+
+            <button
+              onClick={toggleSound}
+              className="p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer"
+              title={soundEnabled ? 'Mute' : 'Unmute'}
+            >
+              {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-[#c6a45c]" /> : <VolumeX className="w-3.5 h-3.5 text-[#a7a8a5]" />}
+            </button>
+
+            <button
+              onClick={onOpenSettings}
+              className="p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer"
+              title="Settings"
+            >
+              <Compass className="w-3.5 h-3.5 text-[#c6a45c]" />
+            </button>
+          </div>
+        </div>
+
+        {/* Opponent Mobile Player Bar */}
+        <div className="flex items-center justify-between gap-2 bg-[#f7f7f4]/95 backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#c6a45c]/25 shadow-sm">
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              className={`w-3 h-3 rounded-full shrink-0 border ${
+                playerColor === 'w' ? 'bg-[#202226] border-black' : 'bg-white border-[#ccc]'
+              }`}
+            />
+            <span className="font-serif font-bold text-xs text-[#202226] truncate">
+              {opponentName}
+            </span>
+            <div className="scale-75 origin-left">
+              <CapturedPieces
+                captured={playerColor === 'w' ? capturedBlack : capturedWhite}
+                advantage={playerColor === 'w' ? (materialAdvantage < 0 ? Math.abs(materialAdvantage) : 0) : (materialAdvantage > 0 ? materialAdvantage : 0)}
+              />
+            </div>
+          </div>
+
+          <div className="shrink-0 scale-90 origin-right">
+            <GameClock
+              color={playerColor === 'w' ? 'b' : 'w'}
+              timeMs={playerColor === 'w' ? blackTimeMs : whiteTimeMs}
+              isActive={turn !== playerColor}
+              playerName=""
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ============================================================== */}
+      {/* DESKTOP MIDDLE WORKSPACE (PLAYERS & PANELS) */}
+      {/* ============================================================== */}
+      <div className="pointer-events-none hidden md:flex items-start justify-between w-full max-w-6xl mx-auto my-auto gap-4">
         {/* Left Player Cards / Clocks */}
         <div className="pointer-events-auto flex flex-col gap-3 w-56 sm:w-64">
           {/* Opponent Card (Top) */}
@@ -238,7 +332,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
         </div>
 
         {/* Right Side: Move History & Camera Presets */}
-        <div className="pointer-events-auto hidden md:flex flex-col gap-3 w-64">
+        <div className="pointer-events-auto flex flex-col gap-3 w-64">
           <MoveHistory />
 
           {/* Camera View Presets */}
@@ -266,11 +360,12 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
         </div>
       </div>
 
-      {/* ================= BOTTOM ACTION BAR ================= */}
-      <footer className="pointer-events-auto flex items-center justify-between w-full max-w-6xl mx-auto gap-2 bg-[#f7f7f4]/95 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card text-xs">
+      {/* ============================================================== */}
+      {/* BOTTOM ACTION BAR (DESKTOP: md+) */}
+      {/* ============================================================== */}
+      <footer className="pointer-events-auto hidden md:flex items-center justify-between w-full max-w-6xl mx-auto gap-2 bg-[#f7f7f4]/95 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card text-xs">
         {/* Left Side Game Actions */}
         <div className="flex items-center gap-2">
-          {/* Undo Button (AI Mode Only) */}
           {gameMode === 'ai' && (
             <button
               onClick={undoMove}
@@ -278,34 +373,31 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
               title="Undo Move (Takeback)"
             >
               <Undo2 className="w-3.5 h-3.5 text-[#c6a45c]" />
-              <span className="hidden sm:inline">Undo Move</span>
+              <span>Undo Move</span>
             </button>
           )}
 
-          {/* Draw Offer Button */}
           <button
             onClick={offerDraw}
             className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white hover:bg-[#c6a45c]/10 border border-[#d6d6d2] text-[#202226] font-medium transition-all cursor-pointer active:scale-95 shadow-sm"
             title="Offer Draw"
           >
             <Handshake className="w-3.5 h-3.5 text-[#c6a45c]" />
-            <span className="hidden sm:inline">Offer Draw</span>
+            <span>Offer Draw</span>
           </button>
 
-          {/* Resign Button */}
           <button
             onClick={() => setShowResignConfirm(true)}
             className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-medium transition-all cursor-pointer active:scale-95 shadow-sm"
             title="Resign Game"
           >
             <Flag className="w-3.5 h-3.5 text-red-500" />
-            <span className="hidden sm:inline">Resign</span>
+            <span>Resign</span>
           </button>
         </div>
 
         {/* Right Side Options */}
         <div className="flex items-center gap-2">
-          {/* New Game */}
           <button
             onClick={() => setShowNewGameConfirm(true)}
             className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#c6a45c] hover:bg-[#b5934a] text-white font-serif font-bold transition-all cursor-pointer active:scale-95 shadow-glow-gold"
@@ -315,6 +407,154 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
           </button>
         </div>
       </footer>
+
+      {/* ============================================================== */}
+      {/* BOTTOM ACTION BAR (MOBILE: < md) — COMPACT, USER CLOCK + ACTIONS */}
+      {/* ============================================================== */}
+      <footer className="pointer-events-auto flex md:hidden flex-col gap-1.5 w-full">
+        {/* User Mobile Player Bar */}
+        <div className="flex items-center justify-between gap-2 bg-[#f7f7f4]/95 backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#c6a45c]/35 shadow-royal-card">
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              className={`w-3 h-3 rounded-full shrink-0 border ${
+                playerColor === 'w' ? 'bg-white border-[#ccc]' : 'bg-[#202226] border-black'
+              }`}
+            />
+            <span className="font-serif font-bold text-xs text-[#202226]">
+              You ({playerColor === 'w' ? 'White' : 'Black'})
+            </span>
+            <div className="scale-75 origin-left">
+              <CapturedPieces
+                captured={playerColor === 'w' ? capturedWhite : capturedBlack}
+                advantage={playerColor === 'w' ? (materialAdvantage > 0 ? materialAdvantage : 0) : (materialAdvantage < 0 ? Math.abs(materialAdvantage) : 0)}
+              />
+            </div>
+          </div>
+
+          <div className="shrink-0 scale-90 origin-right">
+            <GameClock
+              color={playerColor}
+              timeMs={playerColor === 'w' ? whiteTimeMs : blackTimeMs}
+              isActive={turn === playerColor}
+              playerName=""
+            />
+          </div>
+        </div>
+
+        {/* Bottom Actions Row (min 44px touch targets) */}
+        <div className="flex items-center justify-between gap-1.5 bg-[#f7f7f4]/95 backdrop-blur-md px-2 py-1.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
+          <div className="flex items-center gap-1">
+            {gameMode === 'ai' && (
+              <button
+                onClick={undoMove}
+                className="flex items-center justify-center min-w-[40px] h-10 px-2.5 rounded-xl bg-white active:bg-gray-100 border border-[#d6d6d2] text-[#202226] font-medium text-xs cursor-pointer"
+                title="Undo Move"
+              >
+                <Undo2 className="w-4 h-4 text-[#c6a45c]" />
+              </button>
+            )}
+
+            <button
+              onClick={() => setShowMobileHistory(true)}
+              className="flex items-center justify-center min-w-[40px] h-10 px-2.5 rounded-xl bg-white active:bg-gray-100 border border-[#d6d6d2] text-[#202226] font-medium text-xs cursor-pointer"
+              title="Move History"
+            >
+              <History className="w-4 h-4 text-[#666762]" />
+            </button>
+
+            <button
+              onClick={offerDraw}
+              className="flex items-center justify-center min-w-[40px] h-10 px-2 rounded-xl bg-white active:bg-gray-100 border border-[#d6d6d2] text-[#202226] font-medium text-xs cursor-pointer"
+              title="Offer Draw"
+            >
+              <Handshake className="w-4 h-4 text-[#666762]" />
+            </button>
+
+            <button
+              onClick={() => setShowResignConfirm(true)}
+              className="flex items-center justify-center min-w-[40px] h-10 px-2 rounded-xl bg-red-50 active:bg-red-100 border border-red-200 text-red-700 font-medium text-xs cursor-pointer"
+              title="Resign"
+            >
+              <Flag className="w-4 h-4 text-red-500" />
+            </button>
+          </div>
+
+          <button
+            onClick={() => setShowNewGameConfirm(true)}
+            className="flex items-center gap-1.5 h-10 px-3.5 rounded-xl bg-[#c6a45c] active:bg-[#b5934a] text-white font-serif font-bold text-xs uppercase tracking-wider cursor-pointer shadow-glow-gold"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>New Game</span>
+          </button>
+        </div>
+      </footer>
+
+      {/* ============================================================== */}
+      {/* MOBILE CAMERA VIEWS DRAWER */}
+      {/* ============================================================== */}
+      {showMobileCamera && (
+        <div className="pointer-events-auto fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-3 pb-[max(1rem,env(safe-area-inset-bottom))] animate-fade-in">
+          <div className="w-full max-w-sm bg-[#f7f7f4] border border-[#c6a45c]/50 rounded-3xl p-5 shadow-2xl text-[#202226]">
+            <div className="flex items-center justify-between pb-3 border-b border-[#c6a45c]/20 mb-3">
+              <div className="flex items-center gap-1.5 font-serif font-bold text-sm text-[#202226]">
+                <Camera className="w-4 h-4 text-[#c6a45c]" />
+                <span>CHOOSE CAMERA VIEW</span>
+              </div>
+              <button
+                onClick={() => setShowMobileCamera(false)}
+                className="p-1 rounded-lg hover:bg-black/5 text-[#666762] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {cameraButtons.map((btn) => (
+                <button
+                  key={btn.preset}
+                  onClick={() => {
+                    setCameraPreset(btn.preset);
+                    setShowMobileCamera(false);
+                  }}
+                  className={`h-11 rounded-xl text-xs font-serif font-bold transition-all cursor-pointer flex items-center justify-center ${
+                    cameraPreset === btn.preset
+                      ? 'bg-[#c6a45c] text-white shadow-glow-gold'
+                      : 'bg-white border border-[#d6d6d2] text-[#202226] active:bg-[#c6a45c]/10'
+                  }`}
+                >
+                  {btn.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MOBILE MOVE HISTORY DRAWER */}
+      {/* ============================================================== */}
+      {showMobileHistory && (
+        <div className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-sm bg-[#f7f7f4] border border-[#c6a45c]/50 rounded-3xl p-5 shadow-2xl text-[#202226] max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-[#c6a45c]/20 mb-3">
+              <div className="flex items-center gap-1.5 font-serif font-bold text-sm text-[#202226]">
+                <History className="w-4 h-4 text-[#c6a45c]" />
+                <span>NOTATION & MOVES</span>
+              </div>
+              <button
+                onClick={() => setShowMobileHistory(false)}
+                className="p-1 rounded-lg hover:bg-black/5 text-[#666762] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              <MoveHistory />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ================= RESIGN CONFIRMATION MODAL ================= */}
       {showResignConfirm && (
@@ -328,7 +568,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
             <div className="flex gap-2">
               <button
                 onClick={() => setShowResignConfirm(false)}
-                className="flex-1 py-2 rounded-xl bg-white hover:bg-gray-100 text-[#202226] border border-[#d6d6d2] text-xs font-semibold cursor-pointer"
+                className="flex-1 h-11 rounded-xl bg-white active:bg-gray-100 text-[#202226] border border-[#d6d6d2] text-xs font-semibold cursor-pointer"
               >
                 Continue Playing
               </button>
@@ -337,7 +577,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
                   setShowResignConfirm(false);
                   resign();
                 }}
-                className="flex-1 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold cursor-pointer"
+                className="flex-1 h-11 rounded-xl bg-red-600 active:bg-red-500 text-white text-xs font-bold cursor-pointer"
               >
                 Yes, Resign
               </button>
@@ -358,7 +598,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
             <div className="flex gap-2">
               <button
                 onClick={() => setShowNewGameConfirm(false)}
-                className="flex-1 py-2 rounded-xl bg-white hover:bg-gray-100 text-[#202226] border border-[#d6d6d2] text-xs font-semibold cursor-pointer"
+                className="flex-1 h-11 rounded-xl bg-white active:bg-gray-100 text-[#202226] border border-[#d6d6d2] text-xs font-semibold cursor-pointer"
               >
                 Cancel
               </button>
@@ -367,7 +607,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
                   setShowNewGameConfirm(false);
                   resetGame();
                 }}
-                className="flex-1 py-2 rounded-xl bg-[#c6a45c] hover:bg-[#b5934a] text-white text-xs font-serif font-bold cursor-pointer"
+                className="flex-1 h-11 rounded-xl bg-[#c6a45c] active:bg-[#b5934a] text-white text-xs font-serif font-bold cursor-pointer"
               >
                 Restart Game
               </button>
