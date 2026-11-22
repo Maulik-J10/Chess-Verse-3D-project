@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect, useMemo, useCallback } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
@@ -13,10 +13,9 @@ const PRESET_CONFIGS: Record<
 > = {
   front: {
     pos: [0, 4.25, 7.6],
-    target: [0, 2.15, 0],
+    target: [0, 2.05, 0],
   },
   top: {
-    // High-angle overhead view directly above board, safely below elevated chandelier (y = 8.0m)
     pos: [0, 7.3, 0.2],
     target: [0, 1.35, 0],
   },
@@ -43,18 +42,18 @@ export const CameraController: React.FC = () => {
   const { camera, size } = useThree();
 
   const cameraPreset = useGameStore((s) => s.cameraPreset);
+  const setCameraPreset = useGameStore((s) => s.setCameraPreset);
   const isFlipped = useGameStore((s) => s.isFlipped);
   const isMobile = useGameStore((s) => s.isMobile);
 
-  // Calculate dynamic aspect ratio and portrait distance factor
+  // Dynamic aspect ratio calculation
   const aspect = size.width / Math.max(size.height, 1);
   const isPortrait = aspect < 1.0;
 
-  // Responsive distance multiplier so all 64 squares fit inside the narrower viewport
-  // On desktop (aspect >= 1.0), distanceFactor is strictly 1.0 preserving desktop visuals
+  // Responsive distance multiplier so all 64 squares fit inside narrower mobile/tablet viewports
+  // On desktop/laptop (aspect >= 1.0), distanceFactor is strictly 1.0, preserving desktop visuals
   const distanceFactor = useMemo(() => {
     if (!isPortrait) return 1.0;
-    // For portrait phones (aspect 0.45 - 0.75), calculate exact distance needed to frame board
     return Math.min(2.1, Math.max(1.15, 0.92 / Math.max(aspect, 0.42)));
   }, [isPortrait, aspect]);
 
@@ -63,44 +62,89 @@ export const CameraController: React.FC = () => {
   const targetLookRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 1.8, 0));
   const isTransitioningRef = useRef(false);
 
-  // When cameraPreset, isFlipped, or orientation aspect changes, recalculate target
+  // Track previous preset and flipped state to ONLY trigger transitions on intentional changes
+  const prevPresetRef = useRef<CameraPreset>(cameraPreset);
+  const prevFlippedRef = useRef<boolean>(isFlipped);
+
+  // Function to compute camera coordinates for a preset
+  const getPresetCoords = useCallback(
+    (preset: CameraPreset, flipped: boolean) => {
+      let cfg = PRESET_CONFIGS[preset] || PRESET_CONFIGS.front;
+
+      if (flipped) {
+        if (preset === 'white') cfg = PRESET_CONFIGS.black;
+        else if (preset === 'black') cfg = PRESET_CONFIGS.white;
+      }
+
+      const pos = new THREE.Vector3(cfg.pos[0], cfg.pos[1], cfg.pos[2]);
+      const target = new THREE.Vector3(cfg.target[0], cfg.target[1], cfg.target[2]);
+
+      if (preset === 'top') {
+        pos.y *= distanceFactor;
+      } else if (preset === 'cinematic') {
+        if (isPortrait) {
+          pos.x *= 1.3;
+          pos.y *= 1.2;
+          pos.z *= 1.3;
+        }
+      } else if (preset !== 'free') {
+        if (isPortrait) {
+          pos.y *= 1.08 * distanceFactor;
+          pos.z *= distanceFactor;
+          target.y *= 0.95;
+        }
+      }
+
+      return { pos, target };
+    },
+    [distanceFactor, isPortrait]
+  );
+
+  // Initiate transition ONLY when preset or flipped changes explicitly
   useEffect(() => {
-    let cfg = PRESET_CONFIGS[cameraPreset] || PRESET_CONFIGS.front;
+    const presetChanged = prevPresetRef.current !== cameraPreset;
+    const flippedChanged = prevFlippedRef.current !== isFlipped;
 
-    if (isFlipped) {
-      if (cameraPreset === 'white') cfg = PRESET_CONFIGS.black;
-      else if (cameraPreset === 'black') cfg = PRESET_CONFIGS.white;
+    prevPresetRef.current = cameraPreset;
+    prevFlippedRef.current = isFlipped;
+
+    // Do NOT auto-transition if preset is 'free' (user is in manual orbit mode)
+    if (cameraPreset === 'free') {
+      isTransitioningRef.current = false;
+      return;
     }
 
-    // Apply responsive mobile distance scaling
-    if (cameraPreset === 'top') {
-      targetPosRef.current.set(cfg.pos[0], cfg.pos[1] * distanceFactor, cfg.pos[2]);
-      targetLookRef.current.set(cfg.target[0], cfg.target[1], cfg.target[2]);
-    } else if (cameraPreset === 'cinematic') {
-      targetPosRef.current.set(
-        cfg.pos[0] * (isPortrait ? 1.3 : 1.0),
-        cfg.pos[1] * (isPortrait ? 1.2 : 1.0),
-        cfg.pos[2] * (isPortrait ? 1.3 : 1.0)
-      );
-      targetLookRef.current.set(cfg.target[0], cfg.target[1], cfg.target[2]);
-    } else {
-      targetPosRef.current.set(
-        cfg.pos[0],
-        cfg.pos[1] * (isPortrait ? 1.08 * distanceFactor : 1.0),
-        cfg.pos[2] * distanceFactor
-      );
-      targetLookRef.current.set(
-        cfg.target[0],
-        cfg.target[1] * (isPortrait ? 0.95 : 1.0),
-        cfg.target[2]
-      );
+    if (presetChanged || flippedChanged) {
+      const { pos, target } = getPresetCoords(cameraPreset, isFlipped);
+      targetPosRef.current.copy(pos);
+      targetLookRef.current.copy(target);
+      isTransitioningRef.current = true;
     }
+  }, [cameraPreset, isFlipped, getPresetCoords]);
 
-    isTransitioningRef.current = true;
-  }, [cameraPreset, isFlipped, distanceFactor, isPortrait]);
+  // Connect to OrbitControls start event:
+  // As soon as the user touches/drags with fingers or mouse, immediately cancel any
+  // programmatic transition and switch to 'free' mode so controls never fight the user!
+  useEffect(() => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+
+    const handleInteractionStart = () => {
+      isTransitioningRef.current = false;
+      if (useGameStore.getState().cameraPreset !== 'free') {
+        setCameraPreset('free');
+      }
+    };
+
+    controls.addEventListener('start', handleInteractionStart);
+    return () => {
+      controls.removeEventListener('start', handleInteractionStart);
+    };
+  }, [setCameraPreset]);
 
   useFrame((state, delta) => {
-    if (!controlsRef.current) return;
+    const controls = controlsRef.current;
+    if (!controls) return;
 
     // Cinematic continuous slow panoramic sweep around the gallery
     if (cameraPreset === 'cinematic') {
@@ -110,25 +154,30 @@ export const CameraController: React.FC = () => {
       camera.position.x = Math.sin(t) * radius;
       camera.position.z = Math.cos(t) * radius;
       camera.position.y = height;
-      controlsRef.current.target.set(0, 1.8, 0);
-      controlsRef.current.update();
+      controls.target.set(0, 1.8, 0);
+      controls.update();
       return;
     }
 
-    // Smooth lerp transition to new preset
+    // Smooth lerp transition to programmatic preset
     if (isTransitioningRef.current) {
       camera.position.lerp(targetPosRef.current, delta * 4.5);
-      controlsRef.current.target.lerp(targetLookRef.current, delta * 4.5);
+      controls.target.lerp(targetLookRef.current, delta * 4.5);
 
       if (camera.position.distanceTo(targetPosRef.current) < 0.05) {
         camera.position.copy(targetPosRef.current);
-        controlsRef.current.target.copy(targetLookRef.current);
+        controls.target.copy(targetLookRef.current);
         isTransitioningRef.current = false;
       }
     }
 
-    // Update controls for smooth damping
-    controlsRef.current.update();
+    // Clamp camera target so two-finger pan never loses the chessboard
+    controls.target.x = THREE.MathUtils.clamp(controls.target.x, -4.5, 4.5);
+    controls.target.y = THREE.MathUtils.clamp(controls.target.y, 0.5, 3.5);
+    controls.target.z = THREE.MathUtils.clamp(controls.target.z, -4.5, 4.5);
+
+    // Update controls for silky smooth damping
+    controls.update();
   });
 
   return (
@@ -136,17 +185,21 @@ export const CameraController: React.FC = () => {
       ref={controlsRef}
       makeDefault
       enableDamping
-      dampingFactor={0.07}
-      minDistance={3.2 * (isPortrait ? 1.25 : 1.0)}
-      maxDistance={12.5} // Prevents clipping outside room walls
-      minPolarAngle={0.22} // Allows looking smoothly up towards the chandeliers and ceiling
-      maxPolarAngle={1.54} // Locks at floor level; camera never penetrates floor
-      enablePan={false} // Smooth locked orbital rotation around center of chessboard
-      rotateSpeed={isMobile ? 0.6 : 0.8}
-      zoomSpeed={0.8}
+      dampingFactor={0.06}
+      minDistance={2.4} // Close inspection of pieces
+      maxDistance={15.0} // Zoom out to view gallery room
+      minPolarAngle={0.05} // Almost straight down top view (no flip)
+      maxPolarAngle={1.52} // Low table angle, stops at floor level
+      enableRotate={true}
+      rotateSpeed={isMobile ? 0.75 : 0.8}
+      enableZoom={true}
+      zoomSpeed={isMobile ? 0.95 : 0.8}
+      enablePan={true} // Full two-finger pan support!
+      panSpeed={isMobile ? 0.8 : 0.8}
+      screenSpacePanning={true}
       touches={{
-        ONE: THREE.TOUCH.ROTATE,
-        TWO: THREE.TOUCH.DOLLY_PAN,
+        ONE: THREE.TOUCH.ROTATE, // 1 finger = 360° orbit
+        TWO: THREE.TOUCH.DOLLY_PAN, // 2 fingers = pinch zoom + pan
       }}
     />
   );

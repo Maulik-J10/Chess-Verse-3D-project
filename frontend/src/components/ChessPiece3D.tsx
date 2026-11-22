@@ -962,10 +962,34 @@ export const ChessPiece3D: React.FC<ChessPiece3DProps> = ({ type, color, square 
     }
   });
 
+  const pointerDownRef = useRef<{ x: number; y: number; time: number } | null>(null);
+
   return (
     <group
       ref={meshRef}
       position={[targetX, 0.02, targetZ]}
+      onPointerDown={(e) => {
+        pointerDownRef.current = {
+          x: e.clientX,
+          y: e.clientY,
+          time: performance.now(),
+        };
+      }}
+      onPointerUp={(e) => {
+        const start = pointerDownRef.current;
+        if (start) {
+          pointerDownRef.current = null;
+          const dx = e.clientX - start.x;
+          const dy = e.clientY - start.y;
+          const dt = performance.now() - start.time;
+          // Tap detection: only select square if movement is small jitter (< 14px) and short (< 450ms)
+          // Deliberate drags will rotate the camera without accidentally selecting or moving pieces!
+          if (Math.hypot(dx, dy) < 14 && dt < 450) {
+            e.stopPropagation();
+            selectSquare(square);
+          }
+        }
+      }}
       onClick={(e) => {
         e.stopPropagation();
         selectSquare(square);

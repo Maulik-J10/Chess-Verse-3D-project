@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
+import { soundManager } from '../audio/soundManager';
 import { GameClock } from './GameClock';
 import { CapturedPieces } from './CapturedPieces';
 import { ThinkingIndicator } from './ThinkingIndicator';
@@ -86,9 +87,9 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
     <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-2 sm:p-5 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] select-none z-20 overflow-hidden">
       
       {/* ============================================================== */}
-      {/* TOP BAR (DESKTOP & TABLET: md+) */}
+      {/* TOP BAR (DESKTOP: lg+) */}
       {/* ============================================================== */}
-      <header className="pointer-events-auto hidden md:flex items-center justify-between gap-3 w-full max-w-6xl mx-auto">
+      <header className="pointer-events-auto hidden lg:flex items-center justify-between gap-3 w-full max-w-6xl mx-auto">
         {/* Game Mode & Title Badge */}
         <div className="flex items-center gap-3 bg-[#f7f7f4]/95 backdrop-blur-md px-4 py-2 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
           <button
@@ -180,9 +181,9 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
       </header>
 
       {/* ============================================================== */}
-      {/* TOP BAR (MOBILE: < md) — COMPACT, ZERO BOARD OCCLUSION */}
+      {/* TOP BAR (MOBILE & TABLET: < lg) — COMPACT, ZERO BOARD OCCLUSION */}
       {/* ============================================================== */}
-      <div className="pointer-events-auto flex md:hidden flex-col gap-1.5 w-full">
+      <div className="pointer-events-auto flex lg:hidden flex-col gap-1.5 w-full">
         {/* Navigation & Controls Row */}
         <div className="flex items-center justify-between gap-2 bg-[#f7f7f4]/95 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
           <button
@@ -206,12 +207,23 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
             </span>
           </div>
 
-          {/* Quick Action Icons */}
+          {/* Quick Action Icons with 1-tap Camera Reset */}
           <div className="flex items-center gap-1">
+            <button
+              onClick={() => {
+                setCameraPreset('front');
+                soundManager.playClick();
+              }}
+              className="p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer"
+              title="Reset Camera to Front View"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-[#c6a45c]" />
+            </button>
+
             <button
               onClick={() => setShowMobileCamera(true)}
               className="p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer"
-              title="Camera View"
+              title="Camera View Options"
             >
               <Camera className="w-3.5 h-3.5 text-[#c6a45c]" />
             </button>
@@ -267,7 +279,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
       {/* ============================================================== */}
       {/* DESKTOP MIDDLE WORKSPACE (PLAYERS & PANELS) */}
       {/* ============================================================== */}
-      <div className="pointer-events-none hidden md:flex items-start justify-between w-full max-w-6xl mx-auto my-auto gap-4">
+      <div className="pointer-events-none hidden lg:flex items-start justify-between w-full max-w-6xl mx-auto my-auto gap-4">
         {/* Left Player Cards / Clocks */}
         <div className="pointer-events-auto flex flex-col gap-3 w-56 sm:w-64">
           {/* Opponent Card (Top) */}
@@ -361,9 +373,9 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
       </div>
 
       {/* ============================================================== */}
-      {/* BOTTOM ACTION BAR (DESKTOP: md+) */}
+      {/* BOTTOM ACTION BAR (DESKTOP: lg+) */}
       {/* ============================================================== */}
-      <footer className="pointer-events-auto hidden md:flex items-center justify-between w-full max-w-6xl mx-auto gap-2 bg-[#f7f7f4]/95 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card text-xs">
+      <footer className="pointer-events-auto hidden lg:flex items-center justify-between w-full max-w-6xl mx-auto gap-2 bg-[#f7f7f4]/95 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card text-xs">
         {/* Left Side Game Actions */}
         <div className="flex items-center gap-2">
           {gameMode === 'ai' && (
@@ -409,9 +421,9 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
       </footer>
 
       {/* ============================================================== */}
-      {/* BOTTOM ACTION BAR (MOBILE: < md) — COMPACT, USER CLOCK + ACTIONS */}
+      {/* BOTTOM ACTION BAR (MOBILE & TABLET: < lg) — COMPACT, USER CLOCK + ACTIONS */}
       {/* ============================================================== */}
-      <footer className="pointer-events-auto flex md:hidden flex-col gap-1.5 w-full">
+      <footer className="pointer-events-auto flex lg:hidden flex-col gap-1.5 w-full">
         {/* User Mobile Player Bar */}
         <div className="flex items-center justify-between gap-2 bg-[#f7f7f4]/95 backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#c6a45c]/35 shadow-royal-card">
           <div className="flex items-center gap-2 min-w-0">
@@ -514,6 +526,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
                   key={btn.preset}
                   onClick={() => {
                     setCameraPreset(btn.preset);
+                    soundManager.playClick();
                     setShowMobileCamera(false);
                   }}
                   className={`h-11 rounded-xl text-xs font-serif font-bold transition-all cursor-pointer flex items-center justify-center ${
@@ -526,6 +539,19 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
                 </button>
               ))}
             </div>
+
+            {/* Direct Reset View Button */}
+            <button
+              onClick={() => {
+                setCameraPreset('front');
+                soundManager.playClick();
+                setShowMobileCamera(false);
+              }}
+              className="w-full mt-3 py-2.5 rounded-xl bg-white active:bg-[#c6a45c]/10 border border-[#c6a45c]/50 text-[#202226] font-serif font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-[#c6a45c]" />
+              <span>Reset to Default View</span>
+            </button>
           </div>
         </div>
       )}

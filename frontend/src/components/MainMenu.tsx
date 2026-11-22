@@ -44,7 +44,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenHowToP
   };
 
   return (
-    <div className="absolute inset-0 pointer-events-none z-30 flex flex-col justify-between p-4 sm:p-10 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] select-none overflow-y-auto">
+    <div className="absolute inset-0 pointer-events-none z-30 flex flex-col justify-between p-4 sm:p-10 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] select-none overflow-hidden">
       {/* Title & Royal Gallery Branding Header */}
       <div className="pointer-events-auto flex flex-col items-center sm:items-start max-w-md animate-fade-in mt-1 sm:mt-0">
         <div className="flex items-center gap-2 px-3 py-0.5 sm:px-3.5 sm:py-1 rounded-full bg-white/80 border border-[#c6a45c]/40 text-[#c6a45c] text-[10px] sm:text-xs font-serif font-bold tracking-widest uppercase mb-2 sm:mb-3 shadow-sm backdrop-blur-md">
