@@ -44,25 +44,55 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenHowToP
   };
 
   return (
-    <div className="absolute inset-0 pointer-events-none z-30 flex flex-col justify-between p-4 sm:p-10 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] select-none overflow-hidden">
-      {/* Title & Royal Gallery Branding Header */}
-      <div className="pointer-events-auto flex flex-col items-center sm:items-start max-w-md animate-fade-in mt-1 sm:mt-0">
-        <div className="flex items-center gap-2 px-3 py-0.5 sm:px-3.5 sm:py-1 rounded-full bg-white/80 border border-[#c6a45c]/40 text-[#c6a45c] text-[10px] sm:text-xs font-serif font-bold tracking-widest uppercase mb-2 sm:mb-3 shadow-sm backdrop-blur-md">
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>Royal 3D Chess Arena</span>
+    <div className="absolute inset-0 pointer-events-none z-30 flex flex-col justify-between p-3 sm:p-8 md:p-10 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] select-none overflow-y-auto overflow-x-hidden overscroll-none">
+      {/* Top Header Row: Title & Royal Gallery Branding + Quick Access Header Actions */}
+      <div className="flex items-start justify-between w-full gap-2 pointer-events-none">
+        {/* Branding Header */}
+        <div className="pointer-events-auto flex flex-col items-start max-w-xs sm:max-w-md animate-fade-in mt-0.5 sm:mt-0">
+          <div className="flex items-center gap-2 px-3 py-0.5 sm:px-3.5 sm:py-1 rounded-full bg-white/85 border border-[#c6a45c]/40 text-[#c6a45c] text-[10px] sm:text-xs font-serif font-bold tracking-widest uppercase mb-1.5 sm:mb-3 shadow-sm backdrop-blur-md">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Royal 3D Chess Arena</span>
+          </div>
+
+          <h1 className="text-2xl sm:text-4xl md:text-5xl font-serif font-black tracking-wider text-[#202226] drop-shadow-sm text-left">
+            Chess<span className="text-[#c6a45c]">Verse</span><span className="text-[#202226]">3D</span>
+          </h1>
+
+          <p className="text-[10px] sm:text-sm font-serif italic text-[#666762] mt-0.5 sm:mt-1.5 tracking-widest uppercase text-left">
+            "Think beyond the board. See beyond the move."
+          </p>
         </div>
 
-        <h1 className="text-2xl sm:text-4xl md:text-5xl font-serif font-black tracking-wider text-[#202226] drop-shadow-sm text-center sm:text-left">
-          Chess<span className="text-[#c6a45c]">Verse</span><span className="text-[#202226]">3D</span>
-        </h1>
+        {/* Top-Right Quick Access Pills (Always Visible & Accessible on Mobile, Tablet & Desktop) */}
+        <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 shrink-0 animate-fade-in">
+          <button
+            onClick={() => {
+              soundManager.playClick();
+              onOpenHowToPlay();
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white border border-[#c6a45c]/35 hover:border-[#c6a45c] text-[#202226] text-xs font-serif font-bold shadow-sm backdrop-blur-md cursor-pointer transition-all active:scale-95 min-h-[38px]"
+            title="How to Play Chess & Camera Controls"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-[#c6a45c]" />
+            <span className="inline text-[11px] sm:text-xs">Rules</span>
+          </button>
 
-        <p className="text-[11px] sm:text-sm font-serif italic text-[#666762] mt-1 sm:mt-2 tracking-widest uppercase text-center sm:text-left">
-          "Think beyond the board. See beyond the move."
-        </p>
+          <button
+            onClick={() => {
+              soundManager.playClick();
+              onOpenSettings();
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white border border-[#c6a45c]/35 hover:border-[#c6a45c] text-[#202226] text-xs font-serif font-bold shadow-sm backdrop-blur-md cursor-pointer transition-all active:scale-95 min-h-[38px]"
+            title="Graphics & Sound Settings"
+          >
+            <Settings className="w-3.5 h-3.5 text-[#666762]" />
+            <span className="inline text-[11px] sm:text-xs">Settings</span>
+          </button>
+        </div>
       </div>
 
       {/* Main Menu Buttons (Pearl-White & Champagne Gold Cards) */}
-      <div className="pointer-events-auto flex flex-col gap-2.5 sm:gap-3 w-full max-w-xs sm:max-w-sm mx-auto sm:mx-0 animate-fade-in mb-2 sm:mb-4">
+      <div className="pointer-events-auto flex flex-col gap-2 sm:gap-3 w-full max-w-xs sm:max-w-sm mx-auto sm:mx-0 animate-fade-in my-auto sm:my-0 mt-4 sm:mt-6 mb-2 sm:mb-4">
         {/* PLAY VS COMPUTER */}
         <button
           onClick={() => {

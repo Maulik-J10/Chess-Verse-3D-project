@@ -12,7 +12,6 @@ import {
   Undo2, 
   Volume2, 
   VolumeX, 
-  Compass, 
   Home, 
   RefreshCw, 
   Users, 
@@ -21,15 +20,18 @@ import {
   Check,
   Camera,
   History,
+  BookOpen,
+  Settings as SettingsIcon,
   X
 } from 'lucide-react';
 import { CameraPreset } from '../chess/types';
 
 interface GameHUDProps {
   onOpenSettings: () => void;
+  onOpenHowToPlay: () => void;
 }
 
-export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
+export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPlay }) => {
   const [showResignConfirm, setShowResignConfirm] = useState(false);
   const [showNewGameConfirm, setShowNewGameConfirm] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
@@ -152,8 +154,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
           )}
         </div>
 
-        {/* Quick Settings & Audio */}
-        <div className="flex items-center gap-2 bg-[#f7f7f4]/95 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
+        {/* Quick Settings, Rules & Audio */}
+        <div className="flex items-center gap-1.5 bg-[#f7f7f4]/95 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
           <button
             onClick={toggleSound}
             className="p-1.5 rounded-lg text-[#666762] hover:text-[#202226] hover:bg-black/5 transition-colors cursor-pointer"
@@ -171,11 +173,21 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
           </button>
 
           <button
-            onClick={onOpenSettings}
-            className="p-1.5 rounded-lg text-[#666762] hover:text-[#202226] hover:bg-black/5 transition-colors cursor-pointer"
-            title="Settings & Graphics"
+            onClick={onOpenHowToPlay}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[#666762] hover:text-[#202226] hover:bg-black/5 transition-colors cursor-pointer text-xs font-serif font-bold"
+            title="Rules & How to Play"
           >
-            <Compass className="w-4 h-4 text-[#c6a45c]" />
+            <BookOpen className="w-4 h-4 text-[#c6a45c]" />
+            <span className="hidden xl:inline text-[11px]">RULES</span>
+          </button>
+
+          <button
+            onClick={onOpenSettings}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[#666762] hover:text-[#202226] hover:bg-black/5 transition-colors cursor-pointer text-xs font-serif font-bold"
+            title="Settings & Graphics Profile"
+          >
+            <SettingsIcon className="w-4 h-4 text-[#666762]" />
+            <span className="hidden xl:inline text-[11px]">SETTINGS</span>
           </button>
         </div>
       </header>
@@ -185,7 +197,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
       {/* ============================================================== */}
       <div className="pointer-events-auto flex lg:hidden flex-col gap-1.5 w-full">
         {/* Navigation & Controls Row */}
-        <div className="flex items-center justify-between gap-2 bg-[#f7f7f4]/95 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
+        <div className="flex items-center justify-between gap-1.5 bg-[#f7f7f4]/95 backdrop-blur-md px-2.5 py-1.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
           <button
             onClick={returnToMenu}
             className="flex items-center gap-1 text-xs text-[#202226] font-serif font-bold p-1 cursor-pointer"
@@ -196,7 +208,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
           </button>
 
           {/* Turn indicator */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/90 border border-[#c6a45c]/30 text-[11px] font-serif font-bold">
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/90 border border-[#c6a45c]/30 text-[10px] sm:text-[11px] font-serif font-bold">
             <span
               className={`w-2 h-2 rounded-full ${
                 turn === 'w' ? 'bg-white border border-[#999]' : 'bg-[#202226]'
@@ -207,14 +219,14 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
             </span>
           </div>
 
-          {/* Quick Action Icons with 1-tap Camera Reset */}
+          {/* Quick Action Icons with 1-tap Camera Reset, Rules & Settings */}
           <div className="flex items-center gap-1">
             <button
               onClick={() => {
                 setCameraPreset('front');
                 soundManager.playClick();
               }}
-              className="p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer"
+              className="p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
               title="Reset Camera to Front View"
             >
               <RotateCcw className="w-3.5 h-3.5 text-[#c6a45c]" />
@@ -222,26 +234,40 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
 
             <button
               onClick={() => setShowMobileCamera(true)}
-              className="p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer"
+              className="p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
               title="Camera View Options"
             >
               <Camera className="w-3.5 h-3.5 text-[#c6a45c]" />
             </button>
 
             <button
+              onClick={() => {
+                soundManager.playClick();
+                onOpenHowToPlay();
+              }}
+              className="p-1.5 rounded-lg bg-white border border-[#c6a45c]/40 text-[#202226] active:scale-95 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
+              title="Rules & How to Play"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-[#c6a45c]" />
+            </button>
+
+            <button
               onClick={toggleSound}
-              className="p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer"
+              className="p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
               title={soundEnabled ? 'Mute' : 'Unmute'}
             >
               {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-[#c6a45c]" /> : <VolumeX className="w-3.5 h-3.5 text-[#a7a8a5]" />}
             </button>
 
             <button
-              onClick={onOpenSettings}
-              className="p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer"
-              title="Settings"
+              onClick={() => {
+                soundManager.playClick();
+                onOpenSettings();
+              }}
+              className="p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
+              title="Settings & Graphics"
             >
-              <Compass className="w-3.5 h-3.5 text-[#c6a45c]" />
+              <SettingsIcon className="w-3.5 h-3.5 text-[#666762]" />
             </button>
           </div>
         </div>
@@ -552,6 +578,33 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings }) => {
               <RotateCcw className="w-3.5 h-3.5 text-[#c6a45c]" />
               <span>Reset to Default View</span>
             </button>
+
+            {/* Quick Actions in Drawer */}
+            <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-[#c6a45c]/20">
+              <button
+                onClick={() => {
+                  soundManager.playClick();
+                  setShowMobileCamera(false);
+                  onOpenHowToPlay();
+                }}
+                className="py-2.5 rounded-xl bg-white active:bg-gray-100 border border-[#d6d6d2] text-[#202226] font-serif font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-[#c6a45c]" />
+                <span>How to Play</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  soundManager.playClick();
+                  setShowMobileCamera(false);
+                  onOpenSettings();
+                }}
+                className="py-2.5 rounded-xl bg-white active:bg-gray-100 border border-[#d6d6d2] text-[#202226] font-serif font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <SettingsIcon className="w-3.5 h-3.5 text-[#666762]" />
+                <span>Settings</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

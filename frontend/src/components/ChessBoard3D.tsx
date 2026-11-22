@@ -111,6 +111,9 @@ export const ChessBoard3D: React.FC = () => {
                   geometry={tileBoxGeo || undefined}
                   material={isDark ? darkSquareMat : lightSquareMat}
                   onPointerDown={(e) => {
+                    if (typeof window !== 'undefined' && window.__lastPinchEndTime && performance.now() - window.__lastPinchEndTime < 350) {
+                      return;
+                    }
                     pointerDownPosRef.current.set(square, {
                       x: e.clientX,
                       y: e.clientY,
@@ -119,20 +122,21 @@ export const ChessBoard3D: React.FC = () => {
                   }}
                   onPointerUp={(e) => {
                     const start = pointerDownPosRef.current.get(square);
-                    if (start) {
-                      pointerDownPosRef.current.delete(square);
-                      const dx = e.clientX - start.x;
-                      const dy = e.clientY - start.y;
-                      const dt = performance.now() - start.time;
-                      if (Math.hypot(dx, dy) < 14 && dt < 500) {
-                        e.stopPropagation();
-                        selectSquare(square);
-                      }
+                    pointerDownPosRef.current.delete(square);
+                    if (!start) return;
+
+                    // If pinch gesture occurred recently, never select squares accidentally
+                    if (typeof window !== 'undefined' && window.__lastPinchEndTime && performance.now() - window.__lastPinchEndTime < 350) {
+                      return;
                     }
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    selectSquare(square);
+
+                    const dx = e.clientX - start.x;
+                    const dy = e.clientY - start.y;
+                    const dt = performance.now() - start.time;
+                    if (Math.hypot(dx, dy) < 12 && dt < 400) {
+                      e.stopPropagation();
+                      selectSquare(square);
+                    }
                   }}
                   onPointerOver={(e) => {
                     e.stopPropagation();

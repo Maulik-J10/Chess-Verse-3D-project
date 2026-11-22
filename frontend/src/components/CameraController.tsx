@@ -7,6 +7,12 @@ import { useGameStore } from '../store/gameStore';
 import { CameraPreset } from '../chess/types';
 
 // Preset Camera Coordinates calibrated for Grand Chess Room (Desktop baseline)
+declare global {
+  interface Window {
+    __lastPinchEndTime?: number;
+  }
+}
+
 const PRESET_CONFIGS: Record<
   CameraPreset,
   { pos: [number, number, number]; target: [number, number, number] }
@@ -50,12 +56,40 @@ export const CameraController: React.FC = () => {
   const aspect = size.width / Math.max(size.height, 1);
   const isPortrait = aspect < 1.0;
 
+  // Adapt camera FOV on portrait / narrow screens so horizontal field of view doesn't collapse
+  // Desktop/laptop (aspect >= 1.0) stays strictly at 56° (desktop baseline unchanged)
+  useEffect(() => {
+    const pCam = camera as THREE.PerspectiveCamera;
+    if (!pCam.isPerspectiveCamera) return;
+
+    const targetFov = aspect < 1.0
+      ? Math.min(68, Math.max(56, 56 + (1.0 - aspect) * 20))
+      : 56;
+
+    if (Math.abs(pCam.fov - targetFov) > 0.1) {
+      pCam.fov = targetFov;
+      pCam.updateProjectionMatrix();
+    }
+  }, [camera, aspect]);
+
   // Responsive distance multiplier so all 64 squares fit inside narrower mobile/tablet viewports
   // On desktop/laptop (aspect >= 1.0), distanceFactor is strictly 1.0, preserving desktop visuals
   const distanceFactor = useMemo(() => {
     if (!isPortrait) return 1.0;
-    return Math.min(2.1, Math.max(1.15, 0.92 / Math.max(aspect, 0.42)));
+    return Math.min(1.65, Math.max(1.1, 0.88 / Math.max(aspect, 0.45)));
   }, [isPortrait, aspect]);
+
+  // Dynamic maximum distance: ensures the ENTIRE chessboard, outer gold perimeter lip,
+  // bevels, and surrounding table remain 100% visible without ANY edge cropping at max zoom-out
+  const dynamicMaxDistance = useMemo(() => {
+    if (!isPortrait) return 15.0; // Desktop baseline
+    const pCam = camera as THREE.PerspectiveCamera;
+    const fovRad = ((pCam.fov || 56) * Math.PI) / 180;
+    const tanH = Math.tan(fovRad / 2) * aspect;
+    // Board outer diagonal is ~13m; require visible horizontal half-span >= 6.4m
+    const requiredDistance = 6.4 / Math.max(tanH, 0.22);
+    return Math.min(19.5, Math.max(15.5, requiredDistance));
+  }, [isPortrait, aspect, camera]);
 
   // Target positions for smooth lerping
   const targetPosRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 4.3, 7.8));
@@ -142,6 +176,40 @@ export const CameraController: React.FC = () => {
     };
   }, [setCameraPreset]);
 
+  // Global pinch-gesture tracking to completely eliminate accidental piece selection during or right after pinch zoom
+  useEffect(() => {
+    let activeTouches = 0;
+    const handleTouchStart = (e: TouchEvent) => {
+      activeTouches = e.touches.length;
+      if (activeTouches >= 2) {
+        window.__lastPinchEndTime = performance.now();
+      }
+    };
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        window.__lastPinchEndTime = performance.now();
+      }
+    };
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (activeTouches >= 2) {
+        window.__lastPinchEndTime = performance.now();
+      }
+      activeTouches = e.touches.length;
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, []);
+
   useFrame((state, delta) => {
     const controls = controlsRef.current;
     if (!controls) return;
@@ -171,10 +239,8 @@ export const CameraController: React.FC = () => {
       }
     }
 
-    // Clamp camera target so two-finger pan never loses the chessboard
-    controls.target.x = THREE.MathUtils.clamp(controls.target.x, -4.5, 4.5);
-    controls.target.y = THREE.MathUtils.clamp(controls.target.y, 0.5, 3.5);
-    controls.target.z = THREE.MathUtils.clamp(controls.target.z, -4.5, 4.5);
+    // Lock camera target directly on board center so orbit always rotates around the chessboard
+    controls.target.set(0, 1.8, 0);
 
     // Update controls for silky smooth damping
     controls.update();
@@ -186,20 +252,18 @@ export const CameraController: React.FC = () => {
       makeDefault
       enableDamping
       dampingFactor={0.06}
-      minDistance={2.4} // Close inspection of pieces
-      maxDistance={15.0} // Zoom out to view gallery room
-      minPolarAngle={0.05} // Almost straight down top view (no flip)
-      maxPolarAngle={1.52} // Low table angle, stops at floor level
+      minDistance={2.6} // Close inspection of pieces without clipping
+      maxDistance={dynamicMaxDistance} // Calibrated so all 64 squares & board frame are 100% visible at max zoom-out
+      minPolarAngle={0.06} // Almost straight down top view (no flip)
+      maxPolarAngle={1.52} // Low table angle, stops safely at tabletop/floor level
       enableRotate={true}
-      rotateSpeed={isMobile ? 0.75 : 0.8}
+      rotateSpeed={isMobile ? 0.72 : 0.8}
       enableZoom={true}
-      zoomSpeed={isMobile ? 0.95 : 0.8}
-      enablePan={true} // Full two-finger pan support!
-      panSpeed={isMobile ? 0.8 : 0.8}
-      screenSpacePanning={true}
+      zoomSpeed={isMobile ? 0.75 : 0.8} // Silky smooth calibrated pinch zoom without jumps
+      enablePan={false} // Disable panning so two-finger pinch zoom is pure, centered, with zero drift or jitter
       touches={{
         ONE: THREE.TOUCH.ROTATE, // 1 finger = 360° orbit
-        TWO: THREE.TOUCH.DOLLY_PAN, // 2 fingers = pinch zoom + pan
+        TWO: THREE.TOUCH.DOLLY_PAN, // 2 fingers = pure pinch zoom
       }}
     />
   );

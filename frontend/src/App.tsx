@@ -38,7 +38,10 @@ export const App: React.FC = () => {
 
       {/* Screen Layer: Active Game HUD (AI or Online Multiplayer) */}
       {(gameMode === 'ai' || gameMode === 'friend') && (
-        <GameHUD onOpenSettings={() => setIsSettingsOpen(true)} />
+        <GameHUD
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenHowToPlay={() => setIsHowToPlayOpen(true)}
+        />
       )}
 
       {/* Overlays and Modals */}

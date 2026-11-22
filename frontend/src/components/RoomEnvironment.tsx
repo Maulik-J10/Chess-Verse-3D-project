@@ -1891,13 +1891,15 @@ export const RoomEnvironment: React.FC = () => {
       {/* Artistic Luxury Persian/Designer Rug beneath floating board */}
       <RoyalDesignerRug />
 
-      {/* Soft Contact Shadow beneath floating board */}
+      {/* Soft Contact Shadow beneath floating board - optimized to static frame to save 60 render passes/sec */}
       <ContactShadows
         position={[0, 0.02, 0]}
         opacity={0.65}
         scale={13}
         blur={1.6}
         far={5}
+        frames={1}
+        resolution={512}
         color="#1f2124"
       />
 

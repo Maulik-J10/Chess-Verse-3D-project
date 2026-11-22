@@ -72,20 +72,61 @@ export const ChessRoom: React.FC = () => {
     };
   }, []);
 
-  // Compute DPR safely clamped for mobile screens (prevents high GPU fillrate on 3x screens)
+  // Compute DPR safely clamped: guarantees mobile hardware and desktop-mode never exceed GPU fillrate
   const dpr: [number, number] = React.useMemo(() => {
-    if (isMobile) {
-      if (graphicsQuality === 'low') return [1, 1];
-      if (graphicsQuality === 'medium') return [1, 1.2];
-      if (graphicsQuality === 'high') return [1, 1.35];
-      return [1, 1.5]; // Ultra on mobile clamped to 1.5
+    const isTouch =
+      typeof window !== 'undefined' &&
+      (navigator.maxTouchPoints > 0 ||
+        window.matchMedia('(pointer: coarse)').matches ||
+        /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+
+    const w = typeof window !== 'undefined' ? window.innerWidth : 1280;
+    const h = typeof window !== 'undefined' ? window.innerHeight : 720;
+    const nativeDpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+
+    // Hard ceiling on total rendered pixels to prevent GPU memory saturation / freezes:
+    // Touch/mobile devices (including desktop-mode on phones): max 2.2 million pixels
+    // Real desktop PCs: up to 4.0 million pixels
+    const maxPixelBudget = isTouch ? 2.2e6 : 4.0e6;
+
+    let targetDpr = 1.0;
+    if (isTouch || isMobile) {
+      if (graphicsQuality === 'low') targetDpr = 1.0;
+      else if (graphicsQuality === 'medium') targetDpr = 1.15;
+      else if (graphicsQuality === 'high') targetDpr = 1.35;
+      else targetDpr = 1.5;
+    } else {
+      if (graphicsQuality === 'low') targetDpr = 1.0;
+      else if (graphicsQuality === 'medium') targetDpr = 1.25;
+      else if (graphicsQuality === 'high') targetDpr = 1.5;
+      else targetDpr = 2.0;
     }
-    // Desktop: full native fidelity preserved
-    if (graphicsQuality === 'low') return [1, 1];
-    if (graphicsQuality === 'medium') return [1, 1.25];
-    if (graphicsQuality === 'high') return [1, 1.5];
-    return [1, 2];
+
+    const effectiveDpr = Math.min(nativeDpr, targetDpr);
+    const totalPixels = w * h * effectiveDpr * effectiveDpr;
+
+    if (totalPixels > maxPixelBudget) {
+      const clamped = Math.sqrt(maxPixelBudget / (w * h));
+      const finalMax = Math.max(1.0, Math.min(clamped, effectiveDpr));
+      return [1, Number(finalMax.toFixed(2))];
+    }
+
+    return [1, Number(effectiveDpr.toFixed(2))];
   }, [isMobile, graphicsQuality]);
+
+  // Handle WebGL context recovery to prevent black screen / freeze after memory pressure
+  const handleCreated = ({ gl }: { gl: THREE.WebGLRenderer }) => {
+    const canvas = gl.domElement;
+    const handleContextLost = (e: Event) => {
+      e.preventDefault();
+      console.warn('ChessVerse: WebGL context lost. Pausing until GPU restores.');
+    };
+    const handleContextRestored = () => {
+      console.info('ChessVerse: WebGL context restored.');
+    };
+    canvas.addEventListener('webglcontextlost', handleContextLost, false);
+    canvas.addEventListener('webglcontextrestored', handleContextRestored, false);
+  };
 
   // Shadows enabled by default on desktop; on mobile enabled for medium/high/ultra
   const shadowEnabled = graphicsQuality !== 'low';
@@ -97,6 +138,7 @@ export const ChessRoom: React.FC = () => {
         shadows={shadowEnabled}
         dpr={dpr}
         camera={{ position: [0, 4.25, 7.6], fov: 56 }}
+        onCreated={handleCreated}
         gl={{
           antialias: graphicsQuality !== 'low',
           toneMapping: THREE.ACESFilmicToneMapping,

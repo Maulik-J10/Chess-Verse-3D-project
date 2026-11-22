@@ -122,6 +122,7 @@ export const checkIsMobile = (): boolean => {
   if (typeof window === 'undefined') return false;
   return (
     window.innerWidth <= 768 ||
+    (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0 && window.innerWidth <= 1024) ||
     window.matchMedia('(pointer: coarse)').matches ||
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
   );
