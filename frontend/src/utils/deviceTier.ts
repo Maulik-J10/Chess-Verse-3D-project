@@ -12,7 +12,7 @@ export interface DeviceCapabilityProfile {
 /**
  * Evaluates device hardware capabilities cleanly without blocking startup or leaking WebGL contexts.
  * Adapts default graphics tier, canvas resolution budget, and procedural texture sizes
- * across low-budget Androids, older phones, tablets, laptops, and high-end desktops.
+ * across low-budget Androids, older phones, tablets, Desktop-Mode mobile browsers, laptops, and desktops.
  */
 export function detectDeviceCapabilities(): DeviceCapabilityProfile {
   if (typeof window === 'undefined') {
@@ -33,6 +33,7 @@ export function detectDeviceCapabilities(): DeviceCapabilityProfile {
   const isTouch = maxTouchPoints > 0 || isCoarsePointer || isMobileUA;
 
   const minDim = Math.min(window.innerWidth, window.innerHeight);
+  // Keep touch devices recognized even when mobile browsers enable "Desktop Site" (wider viewport / spoofed UA)
   const isMobileViewport = window.innerWidth <= 768 || (isTouch && window.innerWidth <= 1024) || isMobileUA;
 
   const cores = navigator.hardwareConcurrency || (isTouch ? 4 : 8);
@@ -46,11 +47,11 @@ export function detectDeviceCapabilities(): DeviceCapabilityProfile {
 
   let recommendedQuality: GraphicsQuality = 'high';
   if (isLowEndHardware) {
-    recommendedQuality = 'low';
+    recommendedQuality = 'low'; // Performance
   } else if (isTouch || isMobileViewport || cores <= 4) {
-    recommendedQuality = 'medium';
+    recommendedQuality = 'medium'; // Balanced
   } else {
-    recommendedQuality = 'high';
+    recommendedQuality = 'high'; // High Quality
   }
 
   return {

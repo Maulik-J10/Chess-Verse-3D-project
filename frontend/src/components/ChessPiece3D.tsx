@@ -1,5 +1,5 @@
 import React, { useRef, useMemo, useState, useEffect } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PieceColor, PieceType } from '../chess/types';
 import { useGameStore } from '../store/gameStore';
@@ -53,7 +53,7 @@ const createWoodDiffuseMap = (isWhite: boolean, res: number): THREE.CanvasTextur
 
     const darkFibers = new Path2D();
     const lightFibers = new Path2D();
-    for (let i = 0; i < 480; i++) {
+    for (let i = 0; i < 160; i++) {
       const x = rand() * 1024;
       const targetPath = rand() > 0.4 ? darkFibers : lightFibers;
       targetPath.moveTo(x, 0);
@@ -63,17 +63,17 @@ const createWoodDiffuseMap = (isWhite: boolean, res: number): THREE.CanvasTextur
         x + (rand() - 0.5) * 16, 1024
       );
     }
-    ctx.strokeStyle = 'rgba(165, 125, 78, 0.12)';
-    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = 'rgba(165, 125, 78, 0.14)';
+    ctx.lineWidth = 1.8;
     ctx.stroke(darkFibers);
 
-    ctx.strokeStyle = 'rgba(255, 248, 230, 0.16)';
-    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = 'rgba(255, 248, 230, 0.18)';
+    ctx.lineWidth = 2.0;
     ctx.stroke(lightFibers);
 
     ctx.fillStyle = 'rgba(135, 95, 55, 0.18)';
-    for (let p = 0; p < 450; p++) {
-      ctx.fillRect(rand() * 1024, rand() * 1024, 1.4, 3.5);
+    for (let p = 0; p < 150; p++) {
+      ctx.fillRect(rand() * 1024, rand() * 1024, 1.6, 3.8);
     }
   } else {
     const bgGrad = ctx.createLinearGradient(0, 0, 1024, 1024);
@@ -93,7 +93,7 @@ const createWoodDiffuseMap = (isWhite: boolean, res: number): THREE.CanvasTextur
 
     const darkFibers = new Path2D();
     const lightFibers = new Path2D();
-    for (let i = 0; i < 480; i++) {
+    for (let i = 0; i < 160; i++) {
       const x = rand() * 1024;
       const targetPath = rand() > 0.4 ? darkFibers : lightFibers;
       targetPath.moveTo(x, 0);
@@ -103,17 +103,17 @@ const createWoodDiffuseMap = (isWhite: boolean, res: number): THREE.CanvasTextur
         x + (rand() - 0.5) * 14, 1024
       );
     }
-    ctx.strokeStyle = 'rgba(4, 4, 4, 0.22)';
-    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = 'rgba(4, 4, 4, 0.24)';
+    ctx.lineWidth = 1.8;
     ctx.stroke(darkFibers);
 
-    ctx.strokeStyle = 'rgba(60, 60, 60, 0.16)';
-    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = 'rgba(60, 60, 60, 0.18)';
+    ctx.lineWidth = 2.0;
     ctx.stroke(lightFibers);
 
     ctx.fillStyle = 'rgba(3, 3, 3, 0.35)';
-    for (let p = 0; p < 450; p++) {
-      ctx.fillRect(rand() * 1024, rand() * 1024, 1.4, 3.5);
+    for (let p = 0; p < 150; p++) {
+      ctx.fillRect(rand() * 1024, rand() * 1024, 1.6, 3.8);
     }
   }
 
@@ -144,7 +144,7 @@ const createWoodBumpMap = (res: number): THREE.CanvasTexture | null => {
 
   const valleyPaths = new Path2D();
   const ridgePaths = new Path2D();
-  for (let i = 0; i < 340; i++) {
+  for (let i = 0; i < 140; i++) {
     const x = rand() * 1024;
     const targetPath = rand() > 0.4 ? valleyPaths : ridgePaths;
     targetPath.moveTo(x, 0);
@@ -154,12 +154,12 @@ const createWoodBumpMap = (res: number): THREE.CanvasTexture | null => {
       x + (rand() - 0.5) * 12, 1024
     );
   }
-  ctx.strokeStyle = 'rgba(20, 20, 20, 0.12)';
-  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = 'rgba(20, 20, 20, 0.14)';
+  ctx.lineWidth = 1.6;
   ctx.stroke(valleyPaths);
 
-  ctx.strokeStyle = 'rgba(235, 235, 235, 0.10)';
-  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = 'rgba(235, 235, 235, 0.12)';
+  ctx.lineWidth = 1.6;
   ctx.stroke(ridgePaths);
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -174,10 +174,11 @@ const createWoodBumpMap = (res: number): THREE.CanvasTexture | null => {
 const createWoodRoughnessMap = (): THREE.CanvasTexture | null => {
   if (typeof document === 'undefined') return null;
   const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 512;
+  canvas.width = 256;
+  canvas.height = 256;
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
+  ctx.scale(0.5, 0.5);
   const rand = createWoodPRNG(404);
 
   ctx.fillStyle = '#e6e6e6';
@@ -185,7 +186,7 @@ const createWoodRoughnessMap = (): THREE.CanvasTexture | null => {
 
   const roughPath = new Path2D();
   const smoothPath = new Path2D();
-  for (let i = 0; i < 180; i++) {
+  for (let i = 0; i < 90; i++) {
     const x = rand() * 512;
     const targetPath = rand() > 0.5 ? roughPath : smoothPath;
     targetPath.moveTo(x, 0);
@@ -196,11 +197,11 @@ const createWoodRoughnessMap = (): THREE.CanvasTexture | null => {
     );
   }
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-  ctx.lineWidth = 1.6;
+  ctx.lineWidth = 1.8;
   ctx.stroke(roughPath);
 
   ctx.strokeStyle = 'rgba(185, 185, 185, 0.12)';
-  ctx.lineWidth = 1.6;
+  ctx.lineWidth = 1.8;
   ctx.stroke(smoothPath);
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -212,10 +213,13 @@ const createWoodRoughnessMap = (): THREE.CanvasTexture | null => {
   return texture;
 };
 
-// Lazily built shared wood materials (scaled texture resolution by hardware tier!)
+// Lazily built shared wood materials — bump/roughness maps stay unallocated on Performance & Balanced tiers!
 interface PieceMaterials {
-  whiteFull: THREE.MeshStandardMaterial;
-  blackFull: THREE.MeshStandardMaterial;
+  texRes: number;
+  whiteMap: THREE.CanvasTexture | null;
+  blackMap: THREE.CanvasTexture | null;
+  whiteFull: THREE.MeshStandardMaterial | null;
+  blackFull: THREE.MeshStandardMaterial | null;
   whiteFast: THREE.MeshStandardMaterial;
   blackFast: THREE.MeshStandardMaterial;
   emeraldFelt: THREE.MeshStandardMaterial;
@@ -229,34 +233,12 @@ function getPieceMaterials(): PieceMaterials | null {
   if (cachedPieceMaterials) return cachedPieceMaterials;
 
   const caps = detectDeviceCapabilities();
-  const texRes = caps.isLowEndHardware || caps.isMobileViewport ? 512 : 1024;
+  const texRes = caps.isLowEndHardware || caps.isMobileViewport || caps.isTouch ? 256 : 512;
 
   const whiteMap = createWoodDiffuseMap(true, texRes);
   const blackMap = createWoodDiffuseMap(false, texRes);
-  const bumpMap = caps.isLowEndHardware ? null : createWoodBumpMap(texRes);
-  const roughMap = caps.isLowEndHardware ? null : createWoodRoughnessMap();
 
-  const whiteFull = new THREE.MeshStandardMaterial({
-    color: new THREE.Color('#f0e2cc'),
-    map: whiteMap || undefined,
-    bumpMap: bumpMap || undefined,
-    bumpScale: 0.012,
-    roughnessMap: roughMap || undefined,
-    roughness: 0.64,
-    metalness: 0.0,
-  });
-
-  const blackFull = new THREE.MeshStandardMaterial({
-    color: new THREE.Color('#ffffff'),
-    map: blackMap || undefined,
-    bumpMap: bumpMap || undefined,
-    bumpScale: 0.012,
-    roughnessMap: roughMap || undefined,
-    roughness: 0.58,
-    metalness: 0.0,
-  });
-
-  // Fast material for Performance ('low') profile — preserves authentic wood diffuse grain without bump/roughness shader cost
+  // Fast material for Performance ('low') & Balanced ('medium') profiles — preserves wood grain without dFdx/dFdy bump shader overhead
   const whiteFast = new THREE.MeshStandardMaterial({
     color: new THREE.Color('#f0e2cc'),
     map: whiteMap || undefined,
@@ -289,8 +271,48 @@ function getPieceMaterials(): PieceMaterials | null {
     opacity: 0.88,
   });
 
-  cachedPieceMaterials = { whiteFull, blackFull, whiteFast, blackFast, emeraldFelt, shadowGroove, selectionRing };
+  cachedPieceMaterials = {
+    texRes,
+    whiteMap,
+    blackMap,
+    whiteFull: null,
+    blackFull: null,
+    whiteFast,
+    blackFast,
+    emeraldFelt,
+    shadowGroove,
+    selectionRing,
+  };
   return cachedPieceMaterials;
+}
+
+function getPieceWoodMaterial(mats: PieceMaterials, color: PieceColor, useDetailedWood: boolean): THREE.MeshStandardMaterial {
+  if (!useDetailedWood) {
+    return color === 'w' ? mats.whiteFast : mats.blackFast;
+  }
+  if (!mats.whiteFull || !mats.blackFull) {
+    const bumpMap = createWoodBumpMap(mats.texRes);
+    const roughMap = createWoodRoughnessMap();
+    mats.whiteFull = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#f0e2cc'),
+      map: mats.whiteMap || undefined,
+      bumpMap: bumpMap || undefined,
+      bumpScale: 0.012,
+      roughnessMap: roughMap || undefined,
+      roughness: 0.64,
+      metalness: 0.0,
+    });
+    mats.blackFull = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#ffffff'),
+      map: mats.blackMap || undefined,
+      bumpMap: bumpMap || undefined,
+      bumpScale: 0.012,
+      roughnessMap: roughMap || undefined,
+      roughness: 0.58,
+      metalness: 0.0,
+    });
+  }
+  return color === 'w' ? mats.whiteFull : mats.blackFull;
 }
 
 // ==================================================================================
@@ -406,12 +428,17 @@ const createQueenCrownProfile = (): THREE.Vector2[] => [
   new THREE.Vector2(0, 1.33),
 ];
 
-const createQueenHelicalRibbon = (strandIndex: number, totalStrands: number = 4): THREE.BufferGeometry => {
+const createQueenHelicalRibbon = (
+  strandIndex: number,
+  totalStrands: number = 4,
+  tubeSegs: number = 14,
+  radialSegs: number = 6
+): THREE.BufferGeometry => {
   const points: THREE.Vector3[] = [];
   const startY = 0.38;
   const endY = 1.14;
   const height = endY - startY;
-  const steps = 28;
+  const steps = 18;
   const baseAngle = (strandIndex * Math.PI * 2) / totalStrands;
   const totalTurns = 1.18 * Math.PI * 2;
 
@@ -424,7 +451,7 @@ const createQueenHelicalRibbon = (strandIndex: number, totalStrands: number = 4)
   }
 
   const curve = new THREE.CatmullRomCurve3(points);
-  const geo = new THREE.TubeGeometry(curve, 24, 0.044, 10, false);
+  const geo = new THREE.TubeGeometry(curve, tubeSegs, 0.044, radialSegs, false);
   geo.computeVertexNormals();
   return geo;
 };
@@ -467,9 +494,9 @@ const createKnightBaseProfile = (): THREE.Vector2[] => [
   new THREE.Vector2(0, 0.28),
 ];
 
-const createBishopSpiralGroove = (): THREE.BufferGeometry => {
+const createBishopSpiralGroove = (tubeSegs: number = 12): THREE.BufferGeometry => {
   const points: THREE.Vector3[] = [];
-  const steps = 20;
+  const steps = 14;
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const y = 0.9 - t * 0.58;
@@ -478,7 +505,7 @@ const createBishopSpiralGroove = (): THREE.BufferGeometry => {
     points.push(new THREE.Vector3(Math.sin(angle) * (r + 0.005), y, Math.cos(angle) * (r + 0.005)));
   }
   const curve = new THREE.CatmullRomCurve3(points);
-  const geo = new THREE.TubeGeometry(curve, 18, 0.016, 7, false);
+  const geo = new THREE.TubeGeometry(curve, tubeSegs, 0.016, 6, false);
   geo.computeVertexNormals();
   return geo;
 };
@@ -496,21 +523,58 @@ interface MergedPieceGeos {
 let cachedMergedGeos: Record<PieceType, MergedPieceGeos> | null = null;
 let cachedSelectionRingGeo: THREE.RingGeometry | null = null;
 
+// Fast Box3 raycast per piece (0 extra meshes/draw calls, ~1000x faster than triangle raycasting)
+const _hitMatrix = new THREE.Matrix4();
+const _hitRay = new THREE.Ray();
+const _hitPoint = new THREE.Vector3();
+
+function createFastPieceRaycast(height: number): THREE.Object3D['raycast'] {
+  const box = new THREE.Box3(
+    new THREE.Vector3(-0.42, 0, -0.42),
+    new THREE.Vector3(0.42, height, 0.42)
+  );
+  return function fastPieceRaycast(this: THREE.Object3D, raycaster: THREE.Raycaster, intersects: THREE.Intersection[]) {
+    _hitMatrix.copy(this.matrixWorld).invert();
+    _hitRay.copy(raycaster.ray).applyMatrix4(_hitMatrix);
+    if (!_hitRay.intersectBox(box, _hitPoint)) return;
+    _hitPoint.applyMatrix4(this.matrixWorld);
+    const distance = raycaster.ray.origin.distanceTo(_hitPoint);
+    if (distance < raycaster.near || distance > raycaster.far) return;
+    intersects.push({
+      distance,
+      point: _hitPoint.clone(),
+      object: this,
+    });
+  };
+}
+
+const PIECE_RAYCAST: Record<PieceType, THREE.Object3D['raycast']> = {
+  p: createFastPieceRaycast(1.22),
+  r: createFastPieceRaycast(1.42),
+  n: createFastPieceRaycast(1.38),
+  b: createFastPieceRaycast(1.78),
+  q: createFastPieceRaycast(1.62),
+  k: createFastPieceRaycast(2.25),
+};
+
 function getPieceMergedGeos(): Record<PieceType, MergedPieceGeos> | null {
   if (typeof document === 'undefined') return null;
   if (cachedMergedGeos) return cachedMergedGeos;
 
-  const latheSegs = 32; // Smooth sculptural curvature while 33% lighter than 48 segments
+  const caps = detectDeviceCapabilities();
+  const isCompactGeo = caps.isLowEndHardware || caps.isTouch || caps.isMobileViewport;
+  const latheSegs = isCompactGeo ? 18 : 22;
+  const feltSegs = isCompactGeo ? 16 : 20;
 
-  const pawnFelt = new THREE.CylinderGeometry(0.375, 0.375, 0.01, 24);
-  const majorFelt = new THREE.CylinderGeometry(0.415, 0.415, 0.01, 24);
-  const queenFelt = new THREE.CylinderGeometry(0.435, 0.435, 0.01, 24);
-  const kingFelt = new THREE.CylinderGeometry(0.455, 0.455, 0.01, 24);
+  const pawnFelt = new THREE.CylinderGeometry(0.375, 0.375, 0.01, feltSegs);
+  const majorFelt = new THREE.CylinderGeometry(0.415, 0.415, 0.01, feltSegs);
+  const queenFelt = new THREE.CylinderGeometry(0.435, 0.435, 0.01, feltSegs);
+  const kingFelt = new THREE.CylinderGeometry(0.455, 0.455, 0.01, feltSegs);
 
   // ---------------- 1. PAWN ----------------
   const pawnLathe = new THREE.LatheGeometry(createPawnProfile(), latheSegs);
   pawnLathe.computeVertexNormals();
-  const pawnStud = new THREE.SphereGeometry(0.026, 10, 8);
+  const pawnStud = new THREE.SphereGeometry(0.026, 6, 5);
   const pawnSkirtNotch = new THREE.BoxGeometry(0.032, 0.075, 0.025);
 
   const pawnWoodParts = [{ geo: pawnLathe }];
@@ -538,7 +602,7 @@ function getPieceMergedGeos(): Record<PieceType, MergedPieceGeos> | null {
   rookLathe.computeVertexNormals();
   const rookBattleBox = new THREE.BoxGeometry(0.11, 0.2, 0.24);
   const rookEmbrasureGroove = new THREE.BoxGeometry(0.022, 0.18, 0.01);
-  const rookMortarRing = new THREE.TorusGeometry(0.276, 0.008, 6, 28);
+  const rookMortarRing = new THREE.TorusGeometry(0.276, 0.008, 5, isCompactGeo ? 16 : 20);
   const rookBrickJoint = new THREE.BoxGeometry(0.012, 0.14, 0.012);
   const rookCornerPilaster = new THREE.BoxGeometry(0.038, 0.72, 0.022);
   const rookPlinthNotch = new THREE.BoxGeometry(0.042, 0.11, 0.028);
@@ -602,18 +666,18 @@ function getPieceMergedGeos(): Record<PieceType, MergedPieceGeos> | null {
   // ---------------- 3. KNIGHT ----------------
   const knightBase = new THREE.LatheGeometry(createKnightBaseProfile(), latheSegs);
   knightBase.computeVertexNormals();
-  const knightNeck = new THREE.CylinderGeometry(0.165, 0.24, 0.7, 20);
-  const knightShoulder = new THREE.SphereGeometry(0.22, 16, 12);
+  const knightNeck = new THREE.CylinderGeometry(0.165, 0.24, 0.7, isCompactGeo ? 14 : 16);
+  const knightShoulder = new THREE.SphereGeometry(0.22, 12, 9);
   const knightShoulderFurrow = new THREE.BoxGeometry(0.012, 0.18, 0.16);
-  const knightCheek = new THREE.SphereGeometry(0.185, 16, 12);
-  const knightMuzzle = new THREE.CylinderGeometry(0.115, 0.19, 0.45, 18);
-  const knightMuzzleTip = new THREE.SphereGeometry(0.11, 14, 12);
+  const knightCheek = new THREE.SphereGeometry(0.185, 12, 9);
+  const knightMuzzle = new THREE.CylinderGeometry(0.115, 0.19, 0.45, 14);
+  const knightMuzzleTip = new THREE.SphereGeometry(0.11, 10, 8);
   const knightMouthNotch = new THREE.BoxGeometry(0.045, 0.025, 0.07);
   const knightNostril = new THREE.BoxGeometry(0.016, 0.03, 0.036);
-  const knightEyeSocket = new THREE.SphereGeometry(0.034, 10, 8);
+  const knightEyeSocket = new THREE.SphereGeometry(0.034, 8, 6);
   const knightEyePupil = new THREE.BoxGeometry(0.018, 0.038, 0.045);
-  const knightHeadCrown = new THREE.SphereGeometry(0.078, 14, 10);
-  const knightEar = new THREE.ConeGeometry(0.045, 0.19, 10);
+  const knightHeadCrown = new THREE.SphereGeometry(0.078, 10, 8);
+  const knightEar = new THREE.ConeGeometry(0.045, 0.19, 8);
 
   const knightWoodParts: Parameters<typeof mergeTransformedParts>[0] = [
     { geo: knightBase },
@@ -679,8 +743,8 @@ function getPieceMergedGeos(): Record<PieceType, MergedPieceGeos> | null {
   // ---------------- 4. BISHOP ----------------
   const bishopLathe = new THREE.LatheGeometry(createBishopProfile(), latheSegs);
   bishopLathe.computeVertexNormals();
-  const bishopSpiralGroove = createBishopSpiralGroove();
-  const bishopTeardropLoop = new THREE.TorusGeometry(0.092, 0.011, 7, 20);
+  const bishopSpiralGroove = createBishopSpiralGroove(isCompactGeo ? 12 : 14);
+  const bishopTeardropLoop = new THREE.TorusGeometry(0.092, 0.011, 5, 14);
   const bishopMitreSlit = new THREE.BoxGeometry(0.036, 0.3, 0.14);
 
   const bishopWood = mergeTransformedParts([{ geo: bishopLathe }]);
@@ -700,10 +764,10 @@ function getPieceMergedGeos(): Record<PieceType, MergedPieceGeos> | null {
   queenBase.computeVertexNormals();
   const queenCrown = new THREE.LatheGeometry(createQueenCrownProfile(), latheSegs);
   queenCrown.computeVertexNormals();
-  const queenSpindle = new THREE.CylinderGeometry(0.05, 0.05, 0.76, 12);
-  const queenRibbons = [0, 1, 2, 3].map((i) => createQueenHelicalRibbon(i, 4));
+  const queenSpindle = new THREE.CylinderGeometry(0.05, 0.05, 0.76, 10);
+  const queenRibbons = [0, 1, 2, 3].map((i) => createQueenHelicalRibbon(i, 4, isCompactGeo ? 14 : 16, 6));
   const queenSpire = new THREE.ConeGeometry(0.048, 0.22, 4);
-  const queenPearl = new THREE.SphereGeometry(0.088, 14, 12);
+  const queenPearl = new THREE.SphereGeometry(0.088, 10, 8);
 
   const queenWoodParts: Parameters<typeof mergeTransformedParts>[0] = [
     { geo: queenBase },
@@ -736,7 +800,7 @@ function getPieceMergedGeos(): Record<PieceType, MergedPieceGeos> | null {
   const kingShadowRib = new THREE.BoxGeometry(0.014, 0.62, 0.008);
   const kingSkirtGroove = new THREE.BoxGeometry(0.045, 0.1, 0.03);
   const kingCrownGroove = new THREE.BoxGeometry(0.025, 0.2, 0.025);
-  const kingCrossCollar = new THREE.CylinderGeometry(0.065, 0.08, 0.05, 14);
+  const kingCrossCollar = new THREE.CylinderGeometry(0.065, 0.08, 0.05, 12);
   const kingCrossPost = new THREE.BoxGeometry(0.076, 0.28, 0.062);
   const kingCrossBar = new THREE.BoxGeometry(0.24, 0.076, 0.062);
   const kingCrossCapTop = new THREE.BoxGeometry(0.1, 0.03, 0.072);
@@ -812,7 +876,7 @@ function getPieceMergedGeos(): Record<PieceType, MergedPieceGeos> | null {
   queenFelt.translate(0, 0.005, 0);
   kingFelt.translate(0, 0.005, 0);
 
-  cachedSelectionRingGeo = new THREE.RingGeometry(0.42, 0.48, 28);
+  cachedSelectionRingGeo = new THREE.RingGeometry(0.42, 0.48, 20);
 
   cachedMergedGeos = {
     p: { wood: pawnWood, groove: pawnGroove, felt: pawnFelt },
@@ -843,27 +907,32 @@ interface ChessPiece3DProps {
   square: string;
 }
 
-export const ChessPiece3D: React.FC<ChessPiece3DProps> = ({ type, color, square }) => {
+export const ChessPiece3D: React.FC<ChessPiece3DProps> = React.memo(({ type, color, square }) => {
   const meshRef = useRef<THREE.Group>(null);
   const [hovered, setHovered] = useState(false);
+  const invalidate = useThree((s) => s.invalidate);
 
-  const selectedSquare = useGameStore((s) => s.selectedSquare);
+  const isSelected = useGameStore((s) => s.selectedSquare === square);
   const selectSquare = useGameStore((s) => s.selectSquare);
   const graphicsQuality = useGameStore((s) => s.graphicsQuality);
   const isMobile = useGameStore((s) => s.isMobile);
 
-  const isSelected = selectedSquare === square;
   const mats = getPieceMaterials();
   const geos = getPieceMergedGeos();
 
   const [targetX, targetZ] = useMemo(() => squareToCoords(square), [square]);
 
-  // Reset hover if selected state or device type shifts
+  // Reset hover if device type shifts to mobile
   useEffect(() => {
     if (isMobile && hovered) setHovered(false);
   }, [isMobile, hovered]);
 
-  // Early-exit animation damping: zero wasted calculations when pieces are stationary!
+  // Wake demand renderer cleanly when piece state, location, selection, hover, or quality changes
+  useEffect(() => {
+    invalidate();
+  }, [invalidate, targetX, targetZ, isSelected, hovered, graphicsQuality]);
+
+  // Early-exit animation damping + automatic demand-loop wakeups until piece settles
   useFrame((_, delta) => {
     const grp = meshRef.current;
     if (!grp) return;
@@ -872,23 +941,30 @@ export const ChessPiece3D: React.FC<ChessPiece3DProps> = ({ type, color, square 
     const dx = Math.abs(grp.position.x - targetX);
     const dz = Math.abs(grp.position.z - targetZ);
     const dy = Math.abs(grp.position.y - targetY);
+    let animating = false;
 
     if (dx > 0.0008) {
       grp.position.x = THREE.MathUtils.damp(grp.position.x, targetX, 14, delta);
+      animating = true;
     } else if (dx > 0) {
       grp.position.x = targetX;
+      animating = true;
     }
 
     if (dz > 0.0008) {
       grp.position.z = THREE.MathUtils.damp(grp.position.z, targetZ, 14, delta);
+      animating = true;
     } else if (dz > 0) {
       grp.position.z = targetZ;
+      animating = true;
     }
 
     if (dy > 0.0008) {
       grp.position.y = THREE.MathUtils.damp(grp.position.y, targetY, 12, delta);
+      animating = true;
     } else if (dy > 0) {
       grp.position.y = targetY;
+      animating = true;
     }
 
     if (type === 'n') {
@@ -896,9 +972,15 @@ export const ChessPiece3D: React.FC<ChessPiece3DProps> = ({ type, color, square 
       const dr = Math.abs(grp.rotation.y - targetRot);
       if (dr > 0.001) {
         grp.rotation.y = THREE.MathUtils.damp(grp.rotation.y, targetRot, 10, delta);
+        animating = true;
       } else if (dr > 0) {
         grp.rotation.y = targetRot;
+        animating = true;
       }
+    }
+
+    if (animating) {
+      invalidate();
     }
   });
 
@@ -907,8 +989,8 @@ export const ChessPiece3D: React.FC<ChessPiece3DProps> = ({ type, color, square 
   if (!mats || !geos) return null;
 
   const pieceGeo = geos[type];
-  const isFast = graphicsQuality === 'low';
-  const woodMat = color === 'w' ? (isFast ? mats.whiteFast : mats.whiteFull) : isFast ? mats.blackFast : mats.blackFull;
+  const useDetailedWood = graphicsQuality === 'high' || graphicsQuality === 'ultra';
+  const woodMat = getPieceWoodMaterial(mats, color, useDetailedWood);
   const castShadow = graphicsQuality !== 'low';
   const receiveShadow = graphicsQuality !== 'low';
 
@@ -918,12 +1000,13 @@ export const ChessPiece3D: React.FC<ChessPiece3DProps> = ({ type, color, square 
       position={[targetX, 0.02, targetZ]}
       rotation={[0, type === 'n' && color === 'b' ? Math.PI : 0, 0]}
     >
-      {/* Interactive Sculpted Wood Body (Sole mesh casting shadows & receiving raycasts!) */}
+      {/* Interactive Sculpted Wood Body with O(1) Box3 raycast proxy */}
       <mesh
         geometry={pieceGeo.wood}
         material={woodMat}
         castShadow={castShadow}
         receiveShadow={receiveShadow}
+        raycast={PIECE_RAYCAST[type]}
         onPointerDown={(e) => {
           if (typeof window !== 'undefined' && window.__lastPinchEndTime && performance.now() - window.__lastPinchEndTime < 350) {
             return;
@@ -986,4 +1069,4 @@ export const ChessPiece3D: React.FC<ChessPiece3DProps> = ({ type, color, square 
       )}
     </group>
   );
-};
+});

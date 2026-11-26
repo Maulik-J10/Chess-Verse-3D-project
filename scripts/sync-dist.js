@@ -5,6 +5,10 @@ const source = path.resolve('frontend', 'dist');
 const dest = path.resolve('.');
 
 if (fs.existsSync(source)) {
+  const destStockfish = path.join(dest, 'stockfish');
+  if (fs.existsSync(destStockfish)) {
+    fs.rmSync(destStockfish, { recursive: true, force: true });
+  }
   const items = fs.readdirSync(source);
   for (const item of items) {
     const srcPath = path.join(source, item);

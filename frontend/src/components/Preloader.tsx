@@ -148,40 +148,55 @@ const BlackKingFigure = memo(() => (
 BlackKingFigure.displayName = 'BlackKingFigure';
 
 export const Preloader: React.FC<PreloaderProps> = ({ onFinish }) => {
-  const [progress, setProgress] = useState(0);
   const [isFading, setIsFading] = useState(false);
   const [isDone, setIsDone] = useState(false);
   const barRef = useRef<HTMLDivElement>(null);
+  const pctRef = useRef<HTMLSpanElement>(null);
+  const statusRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     const startTime = performance.now();
-    const duration = 1800; // 1.8 seconds smooth entry duration
+    const duration = 1400; // Brisk GPU-composited entry without React state thrash during 3D startup
 
-    // Use interval to update percentage without overwhelming main thread
-    const intervalId = setInterval(() => {
+    let rafId = 0;
+    let fadeTimer = 0;
+    let doneTimer = 0;
+
+    const tick = () => {
       const elapsed = performance.now() - startTime;
       const pct = Math.min(100, Math.round((elapsed / duration) * 100));
-      
-      setProgress(pct);
+
       if (barRef.current) {
         barRef.current.style.transform = `scaleX(${pct / 100})`;
       }
-
+      if (pctRef.current) {
+        pctRef.current.textContent = `${pct}%`;
+      }
       if (pct >= 100) {
-        clearInterval(intervalId);
-        // Seamless 350ms fade-out transition
-        setTimeout(() => {
+        if (statusRef.current) {
+          statusRef.current.textContent = 'Ready';
+        }
+        fadeTimer = window.setTimeout(() => {
           setIsFading(true);
-          setTimeout(() => {
+          doneTimer = window.setTimeout(() => {
             setIsDone(true);
             sessionStorage.setItem('chessverse3d_preloaded', 'true');
             if (onFinish) onFinish();
-          }, 350);
-        }, 120);
+          }, 320);
+        }, 80);
+        return;
       }
-    }, 32); // 30 FPS numerical update is silky smooth and lightweight
 
-    return () => clearInterval(intervalId);
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(fadeTimer);
+      clearTimeout(doneTimer);
+    };
   }, [onFinish]);
 
   if (isDone) return null;
@@ -227,17 +242,16 @@ export const Preloader: React.FC<PreloaderProps> = ({ onFinish }) => {
                 className="h-full w-full rounded-full bg-gradient-to-r from-[#b9872e] via-[#fae19d] to-[#cca044] origin-left will-change-transform"
                 style={{
                   transform: 'scaleX(0)',
-                  transition: 'transform 45ms linear',
                 }}
               />
             </div>
 
             {/* Percentage & status */}
             <div className="flex items-center justify-between w-full text-[10px] font-mono text-[#c6a45c] px-0.5">
-              <span className="tracking-wider uppercase font-serif font-semibold text-[#8a8479]">
-                {progress < 100 ? 'Entering Arena...' : 'Ready'}
+              <span ref={statusRef} className="tracking-wider uppercase font-serif font-semibold text-[#8a8479]">
+                Entering Arena...
               </span>
-              <span className="font-bold">{progress}%</span>
+              <span ref={pctRef} className="font-bold">0%</span>
             </div>
           </div>
         </div>

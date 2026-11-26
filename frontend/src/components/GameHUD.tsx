@@ -195,7 +195,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
       {/* ============================================================== */}
       <div className="pointer-events-auto flex lg:hidden flex-col gap-1.5 w-full">
         {/* Navigation & Controls Row */}
-        <div className="flex items-center justify-between gap-1 bg-[#f7f7f4]/95 backdrop-blur-md px-2 sm:px-3 py-1.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
+        <div className="flex items-center justify-between gap-1 bg-[#f7f7f4]/95 px-2 sm:px-3 py-1.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
           <button
             onClick={returnToMenu}
             className="flex items-center gap-1 text-xs text-[#202226] font-serif font-bold p-1 cursor-pointer shrink-0"
@@ -271,7 +271,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
         </div>
 
         {/* Opponent Mobile Player Bar */}
-        <div className="flex items-center justify-between gap-2 bg-[#f7f7f4]/95 backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#c6a45c]/25 shadow-sm">
+        <div className="flex items-center justify-between gap-2 bg-[#f7f7f4]/95 px-3 py-1.5 rounded-xl border border-[#c6a45c]/25 shadow-sm">
           <div className="flex items-center gap-2 min-w-0">
             <div
               className={`w-3 h-3 rounded-full shrink-0 border ${
@@ -446,7 +446,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
       {/* ============================================================== */}
       <footer className="pointer-events-auto flex lg:hidden flex-col gap-1.5 w-full">
         {/* User Mobile Player Bar */}
-        <div className="flex items-center justify-between gap-2 bg-[#f7f7f4]/95 backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#c6a45c]/35 shadow-royal-card">
+        <div className="flex items-center justify-between gap-2 bg-[#f7f7f4]/95 px-3 py-1.5 rounded-xl border border-[#c6a45c]/35 shadow-royal-card">
           <div className="flex items-center gap-2 min-w-0">
             <div
               className={`w-3 h-3 rounded-full shrink-0 border ${
@@ -474,7 +474,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
         </div>
 
         {/* Bottom Actions Row (min 44px touch targets) */}
-        <div className="flex items-center justify-between gap-1.5 bg-[#f7f7f4]/95 backdrop-blur-md px-2 py-1.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
+        <div className="flex items-center justify-between gap-1.5 bg-[#f7f7f4]/95 px-2 py-1.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
           <div className="flex items-center gap-1">
             {gameMode === 'ai' && (
               <button

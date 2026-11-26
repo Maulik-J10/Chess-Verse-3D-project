@@ -35,10 +35,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   if (!isOpen) return null;
 
   const qualities: { id: GraphicsQuality; label: string; badge: string; desc: string }[] = [
-    { id: 'low', label: 'Performance', badge: 'Fastest', desc: '1x DPR, smooth gameplay for all mobile phones' },
-    { id: 'medium', label: 'Balanced', badge: 'Default Mobile', desc: 'Adaptive resolution, balanced ambient shadows' },
-    { id: 'high', label: 'High Quality', badge: 'Desktop', desc: 'Crisp resolution, realistic piece shadows & tone mapping' },
-    { id: 'ultra', label: 'Ultra Cinema', badge: 'Max Fidelity', desc: 'Full fidelity ACES filmic grading & 2x native DPR' },
+    { id: 'low', label: 'Performance', badge: 'Low-End Mobile', desc: '1x DPR, fast shaders & demand loop for weaker phones' },
+    { id: 'medium', label: 'Balanced', badge: 'Avg Devices', desc: 'Adaptive resolution, 512px shadows & zero idle GPU drain' },
+    { id: 'high', label: 'High Quality', badge: 'Capable Devices', desc: 'Crisp resolution, soft piece wood bump & dynamic lighting' },
+    { id: 'ultra', label: 'Ultra Cinema', badge: 'Max Fidelity', desc: 'Full spotlight accents, 2K shadows & up to 2x native DPR' },
   ];
 
   return (

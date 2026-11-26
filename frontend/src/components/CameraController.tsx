@@ -13,11 +13,11 @@ declare global {
   }
 }
 
-// Strict safe inner room envelope so camera can NEVER exit walls, pass above ceiling/strip lights,
-// or hit corner chandeliers/credenzas (walls at +-18m, chandeliers at +-12.8m, strip lights at 14.54m).
-const SAFE_MAX_WALL_COORD = 15.8;
-const SAFE_MAX_HORIZ_RADIUS = 15.6;
-const SAFE_MAX_Y = ROOM_HEIGHT - 0.85; // 13.75m (strictly below 14.54m strip lights!)
+// Strict safe inner room envelope so camera can NEVER exit walls (+-18m), credenzas (+-17.15m),
+// corner chandelier inner rings (16.80m), or ceiling strip lights (16.74m).
+const SAFE_MAX_WALL_COORD = 16.6;
+const SAFE_MAX_HORIZ_RADIUS = 16.5;
+const SAFE_MAX_Y = ROOM_HEIGHT - 0.85; // 15.95m (strictly below 16.74m strip lights!)
 const SAFE_MIN_Y = 1.55;
 
 const PRESET_CONFIGS: Record<
@@ -29,7 +29,7 @@ const PRESET_CONFIGS: Record<
     target: [0, 2.0, 0],
   },
   top: {
-    pos: [0, 11.45, 0.25], // Fits entire 9.68m board + borders cleanly on desktop & below 14.54m ceiling
+    pos: [0, 12.6, 0.25], // Fits entire 9.68m board + borders cleanly between HUD bars & below ceiling
     target: [0, 1.35, 0],
   },
   white: {
@@ -50,12 +50,15 @@ const PRESET_CONFIGS: Record<
   },
 };
 
-// Reusable scratch vector to eliminate per-frame allocations inside useFrame
+// Reusable scratch objects to eliminate per-frame allocations inside useFrame
 const _offsetVec = new THREE.Vector3();
+const _targetOffsetVec = new THREE.Vector3();
+const _curSpherical = new THREE.Spherical();
+const _tgtSpherical = new THREE.Spherical();
 
 export const CameraController: React.FC = () => {
   const controlsRef = useRef<OrbitControlsImpl>(null);
-  const { camera, size } = useThree();
+  const { camera, size, invalidate } = useThree();
 
   const cameraPreset = useGameStore((s) => s.cameraPreset);
   const setCameraPreset = useGameStore((s) => s.setCameraPreset);
@@ -64,15 +67,23 @@ export const CameraController: React.FC = () => {
 
   const aspect = size.width / Math.max(size.height, 1);
   const isPortrait = aspect < 1.0;
+  // Detect mobile/compact landscape (e.g. 844x390 phone rotated sideways where HUD covers top/bottom bands)
+  const isCompactLandscape = !isPortrait && size.height < 540;
 
-  // Hor+ FOV scaling: desktop/landscape (>= 1.0) stays strictly at 56 deg;
-  // portrait viewports smoothly widen vertical FOV so horizontal span fits all 64 squares & borders cleanly.
+  // Hor+ FOV scaling: desktop/standard landscape keeps strictly 56 deg;
+  // portrait widens vertical FOV so horizontal span fits all 64 squares & borders;
+  // compact phone landscape slightly widens FOV (68 deg) so board fits cleanly between top/bottom HUD bars.
   const targetFov = useMemo(() => {
-    if (!isPortrait) return 56;
-    const desiredTanHalfH = 0.415; // Preserves ~45 deg horizontal FOV across skinny phones
-    const computedFov = (2 * Math.atan(desiredTanHalfH / Math.max(aspect, 0.42)) * 180) / Math.PI;
-    return Math.min(85, Math.max(56, computedFov));
-  }, [isPortrait, aspect]);
+    if (isPortrait) {
+      const desiredTanHalfH = 0.455;
+      const computedFov = (2 * Math.atan(desiredTanHalfH / Math.max(aspect, 0.42)) * 180) / Math.PI;
+      return Math.min(88, Math.max(56, computedFov));
+    }
+    if (isCompactLandscape) {
+      return 68;
+    }
+    return 56;
+  }, [isPortrait, isCompactLandscape, aspect]);
 
   useEffect(() => {
     const pCam = camera as THREE.PerspectiveCamera;
@@ -93,19 +104,31 @@ export const CameraController: React.FC = () => {
     }
   }, [camera, targetFov]);
 
-  // Distance multiplier for preset framing on portrait viewports
+  // Distance multiplier for preset framing on portrait & compact landscape viewports
   const distanceFactor = useMemo(() => {
-    if (!isPortrait) return 1.0;
-    return Math.min(1.52, Math.max(1.08, 0.72 / Math.max(aspect, 0.45)));
-  }, [isPortrait, aspect]);
+    if (isPortrait) {
+      return Math.min(2.08, Math.max(1.22, 0.96 / Math.max(aspect, 0.44)));
+    }
+    if (isCompactLandscape) {
+      return 1.48;
+    }
+    return 1.0;
+  }, [isPortrait, isCompactLandscape, aspect]);
 
-  // Max orbit distance calibrated to show full 4-corner board diagonal (~13.68m) while fitting inside room
+  // Max orbit distance calibrated so full 4-corner board diagonal (outer radius ~6.85m + margin)
+  // remains 100% visible horizontally and vertically while staying strictly inside the room.
   const desiredMaxDistance = useMemo(() => {
-    if (!isPortrait) return 15.0; // Desktop baseline
-    const tanHalfH = Math.tan(((targetFov * Math.PI) / 180) * 0.5) * aspect;
-    const diagFitDist = 6.95 / Math.max(tanHalfH, 0.34);
-    return Math.min(17.4, Math.max(15.2, diagFitDist));
-  }, [isPortrait, aspect, targetFov]);
+    const tanHalfV = Math.tan(((targetFov * Math.PI) / 180) * 0.5);
+    const tanHalfH = tanHalfV * aspect;
+    if (isPortrait) {
+      const diagFitDist = 7.45 / Math.max(Math.min(tanHalfH, tanHalfV), 0.36);
+      return Math.min(18.5, Math.max(16.2, diagFitDist));
+    }
+    if (isCompactLandscape) {
+      return 17.5;
+    }
+    return 15.8;
+  }, [isPortrait, isCompactLandscape, aspect, targetFov]);
 
   const targetPosRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 4.25, 7.6));
   const targetLookRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 1.85, 0));
@@ -128,26 +151,31 @@ export const CameraController: React.FC = () => {
       const target = new THREE.Vector3(cfg.target[0], cfg.target[1], cfg.target[2]);
 
       if (preset === 'top') {
-        // Compute safe top-down elevation below strip lights that fits entire 9.68m board + borders
+        const tanHalfV = Math.tan(((targetFov * Math.PI) / 180) * 0.5);
+        const tanHalfH = tanHalfV * aspect;
         if (isPortrait) {
-          const tanHalfH = Math.tan(((targetFov * Math.PI) / 180) * 0.5) * aspect;
-          const neededHeight = 5.05 / Math.max(tanHalfH, 0.34);
+          // Leave clean margin around all 4 outer board borders (5.4m half-width)
+          const neededHeight = 5.4 / Math.max(tanHalfH, 0.36);
+          pos.y = Math.min(SAFE_MAX_Y - 0.1, 1.35 + neededHeight);
+        } else if (isCompactLandscape) {
+          // Fit Ranks 1-8 cleanly between mobile landscape top & bottom HUD bars
+          const neededHeight = 9.8 / Math.max(tanHalfV, 0.45);
           pos.y = Math.min(SAFE_MAX_Y - 0.1, 1.35 + neededHeight);
         } else {
-          pos.y = Math.min(SAFE_MAX_Y - 0.1, 11.45);
+          pos.y = Math.min(SAFE_MAX_Y - 0.1, 12.6);
         }
         pos.z = 0.25;
       } else if (preset === 'cinematic') {
-        if (isPortrait) {
-          pos.x *= 1.25;
-          pos.y *= 1.15;
-          pos.z *= 1.25;
+        if (isPortrait || isCompactLandscape) {
+          pos.x *= 1.3;
+          pos.y *= 1.2;
+          pos.z *= 1.3;
         }
       } else if (preset !== 'free') {
-        if (isPortrait) {
-          pos.y *= 1.05 * distanceFactor;
+        if (isPortrait || isCompactLandscape) {
+          pos.y *= distanceFactor;
           pos.z *= distanceFactor;
-          target.y = 1.75;
+          target.y = isPortrait ? 1.72 : 1.78;
         }
       }
 
@@ -155,10 +183,16 @@ export const CameraController: React.FC = () => {
       pos.x = THREE.MathUtils.clamp(pos.x, -SAFE_MAX_WALL_COORD, SAFE_MAX_WALL_COORD);
       pos.z = THREE.MathUtils.clamp(pos.z, -SAFE_MAX_WALL_COORD, SAFE_MAX_WALL_COORD);
       pos.y = THREE.MathUtils.clamp(pos.y, SAFE_MIN_Y, SAFE_MAX_Y);
+      const horiz = Math.hypot(pos.x, pos.z);
+      if (horiz > SAFE_MAX_HORIZ_RADIUS) {
+        const s = SAFE_MAX_HORIZ_RADIUS / horiz;
+        pos.x *= s;
+        pos.z *= s;
+      }
 
       return { pos, target };
     },
-    [distanceFactor, isPortrait, aspect, targetFov]
+    [distanceFactor, isPortrait, isCompactLandscape, aspect, targetFov]
   );
 
   // Trigger smooth camera transition on intentional preset/flip changes
@@ -179,12 +213,13 @@ export const CameraController: React.FC = () => {
       targetPosRef.current.copy(pos);
       targetLookRef.current.copy(target);
       isTransitioningRef.current = true;
+      invalidate();
     }
-  }, [cameraPreset, isFlipped, getPresetCoords]);
+  }, [cameraPreset, isFlipped, getPresetCoords, invalidate]);
 
-  // Adjust initial camera framing on first portrait mount cleanly without fighting user later
+  // Adjust initial camera framing cleanly for portrait / compact-landscape on first mount
   useEffect(() => {
-    if (isPortrait && cameraPreset === 'front') {
+    if ((isPortrait || isCompactLandscape) && cameraPreset === 'front') {
       const { pos, target } = getPresetCoords('front', isFlipped);
       camera.position.copy(pos);
       if (controlsRef.current) {
@@ -192,7 +227,7 @@ export const CameraController: React.FC = () => {
         controlsRef.current.update();
       }
     }
-    // Intentionally run once on mount for portrait initial framing
+    // Intentionally run once on mount for initial viewport framing
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -208,11 +243,13 @@ export const CameraController: React.FC = () => {
       }
     };
 
+    controls.maxDistance = desiredMaxDistance;
+
     controls.addEventListener('start', handleInteractionStart);
     return () => {
       controls.removeEventListener('start', handleInteractionStart);
     };
-  }, [setCameraPreset]);
+  }, [setCameraPreset, desiredMaxDistance]);
 
   // Multi-touch pinch detection: prevents accidental piece selection during/right after two-finger pinch zoom
   useEffect(() => {
@@ -256,29 +293,59 @@ export const CameraController: React.FC = () => {
     if (cameraPreset === 'cinematic') {
       cinematicClockRef.current += delta;
       const t = cinematicClockRef.current * 0.12;
-      const radius = isPortrait ? 10.2 : 8.5;
-      const height = (isPortrait ? 5.2 : 4.2) + Math.sin(t * 0.5) * 0.45;
+      const radius = isPortrait ? 11.2 : isCompactLandscape ? 10.0 : 8.5;
+      const height = (isPortrait ? 6.0 : 4.2) + Math.sin(t * 0.5) * 0.45;
       camera.position.set(Math.sin(t) * radius, Math.min(SAFE_MAX_Y, height), Math.cos(t) * radius);
       controls.target.set(0, 1.8, 0);
       controls.update();
+      invalidate();
       return;
     }
 
-    // 2. Smooth lerp transition toward active preset
+    // 2. Smooth spherical preset transition (sweeps cleanly around the board instead of clipping through center pieces)
     if (isTransitioningRef.current) {
-      const alpha = Math.min(1, delta * 5.0);
-      camera.position.lerp(targetPosRef.current, alpha);
+      const alpha = 1 - Math.exp(-delta * 6.0);
       controls.target.lerp(targetLookRef.current, alpha);
 
-      if (camera.position.distanceTo(targetPosRef.current) < 0.05) {
+      _offsetVec.subVectors(camera.position, controls.target);
+      _targetOffsetVec.subVectors(targetPosRef.current, targetLookRef.current);
+
+      _curSpherical.setFromVector3(_offsetVec);
+      _tgtSpherical.setFromVector3(_targetOffsetVec);
+
+      let dTheta = _tgtSpherical.theta - _curSpherical.theta;
+      while (dTheta > Math.PI) dTheta -= Math.PI * 2;
+      while (dTheta < -Math.PI) dTheta += Math.PI * 2;
+
+      _curSpherical.theta += dTheta * alpha;
+      _curSpherical.phi += (_tgtSpherical.phi - _curSpherical.phi) * alpha;
+      _curSpherical.radius += (_tgtSpherical.radius - _curSpherical.radius) * alpha;
+
+      _offsetVec.setFromSpherical(_curSpherical);
+      camera.position.copy(controls.target).add(_offsetVec);
+
+      if (
+        camera.position.distanceTo(targetPosRef.current) < 0.05 &&
+        controls.target.distanceTo(targetLookRef.current) < 0.02
+      ) {
         camera.position.copy(targetPosRef.current);
         controls.target.copy(targetLookRef.current);
         isTransitioningRef.current = false;
+      } else {
+        invalidate();
       }
     } else {
-      // Anchor target firmly to chessboard center (slightly lower in steep overhead angles)
-      const targetY = cameraPreset === 'top' ? 1.35 : 1.78;
-      controls.target.set(0, targetY, 0);
+      // Smoothly maintain target height (prevents vertical snap when dragging out of Top view)
+      const desiredTargetY = cameraPreset === 'top' ? 1.35 : 1.78;
+      const dy = Math.abs(controls.target.y - desiredTargetY);
+      const nextY =
+        dy > 0.001
+          ? THREE.MathUtils.damp(controls.target.y, desiredTargetY, 10, delta)
+          : desiredTargetY;
+      controls.target.set(0, nextY, 0);
+      if (dy > 0.001) {
+        invalidate();
+      }
     }
 
     // 3. Directional Room-Box + Ceiling + Chandelier Envelope Clamping:
@@ -305,10 +372,31 @@ export const CameraController: React.FC = () => {
     controls.update();
 
     // 5. Final hard defensive clamp inside closed gallery interior (prevents burst pinch/scroll escapes)
-    if (camera.position.y > SAFE_MAX_Y) camera.position.y = SAFE_MAX_Y;
-    if (camera.position.y < SAFE_MIN_Y) camera.position.y = SAFE_MIN_Y;
-    camera.position.x = THREE.MathUtils.clamp(camera.position.x, -SAFE_MAX_WALL_COORD, SAFE_MAX_WALL_COORD);
-    camera.position.z = THREE.MathUtils.clamp(camera.position.z, -SAFE_MAX_WALL_COORD, SAFE_MAX_WALL_COORD);
+    let clamped = false;
+    if (camera.position.y > SAFE_MAX_Y) {
+      camera.position.y = SAFE_MAX_Y;
+      clamped = true;
+    } else if (camera.position.y < SAFE_MIN_Y) {
+      camera.position.y = SAFE_MIN_Y;
+      clamped = true;
+    }
+    const clampedX = THREE.MathUtils.clamp(camera.position.x, -SAFE_MAX_WALL_COORD, SAFE_MAX_WALL_COORD);
+    const clampedZ = THREE.MathUtils.clamp(camera.position.z, -SAFE_MAX_WALL_COORD, SAFE_MAX_WALL_COORD);
+    if (clampedX !== camera.position.x || clampedZ !== camera.position.z) {
+      camera.position.x = clampedX;
+      camera.position.z = clampedZ;
+      clamped = true;
+    }
+    const horizDist = Math.hypot(camera.position.x, camera.position.z);
+    if (horizDist > SAFE_MAX_HORIZ_RADIUS) {
+      const s = SAFE_MAX_HORIZ_RADIUS / horizDist;
+      camera.position.x *= s;
+      camera.position.z *= s;
+      clamped = true;
+    }
+    if (clamped) {
+      camera.lookAt(controls.target);
+    }
   });
 
   return (
@@ -318,7 +406,6 @@ export const CameraController: React.FC = () => {
       enableDamping
       dampingFactor={0.07}
       minDistance={2.8} // Close inspection of carved pieces without clipping geometry
-      maxDistance={desiredMaxDistance}
       minPolarAngle={0.05} // Top-down view cleanly unobstructed
       maxPolarAngle={1.50} // Low tabletop angle, stops safely above floor
       enableRotate={true}

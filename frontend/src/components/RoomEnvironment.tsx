@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { ContactShadows } from '@react-three/drei';
 import { useGameStore } from '../store/gameStore';
@@ -7,17 +7,19 @@ import { mergeTransformedParts, NO_RAYCAST } from '../utils/geometryUtils';
 import { detectDeviceCapabilities } from '../utils/deviceTier';
 
 // ==================================================================================
-// SHARED ROOM CONSTANTS (Expanded 36m x 36m x 14.6m Stately Gallery Architecture)
-// Gives generous headroom & wall clearance so camera NEVER exits walls or hits ceiling
-// while keeping default desktop framing visually identical to baseline.
+// SHARED ROOM CONSTANTS (Expanded 36m x 36m x 16.8m Stately Gallery Architecture)
+// Gives generous headroom & wall clearance so camera NEVER exits walls, hits ceiling/strip lights,
+// or crops board corners on portrait phones while keeping desktop framing intact.
 // ==================================================================================
 export const ROOM_HALF_SIZE = 18.0;
 export const ROOM_SIZE = 36.0;
-export const ROOM_HEIGHT = 14.6;
+export const ROOM_HEIGHT = 16.8;
 export const CORNER_CHANDELIER_OFFSET = 12.8;
 
-// Shared texture cache for central WallArtwork across mounts
+// Shared texture caches across mounts (prevents CPU re-bakes on navigation/remount)
 const wallArtworkTextureCache = new Map<string, THREE.CanvasTexture>();
+const rugTextureCache = new Map<number, THREE.CanvasTexture>();
+const oakTextureCache = new Map<number, THREE.CanvasTexture>();
 
 // Singleton shared materials & merged geometries for WallArtwork frames
 const wallArtStatic = typeof document !== 'undefined' ? (() => {
@@ -88,7 +90,7 @@ const WallArtwork: React.FC<WallArtworkProps> = ({
 }) => {
   const canvasTexture = useMemo(() => {
     const caps = detectDeviceCapabilities();
-    const scale = caps.isLowEndHardware ? 0.5 : caps.isMobileViewport ? 0.65 : 0.85;
+    const scale = caps.isLowEndHardware ? 0.25 : caps.isTouch ? 0.36 : 0.48;
     const cacheKey = `${headingLine1}_${headingLine2}_${headingLine3}_${headingLine4}_${scale}`;
     if (wallArtworkTextureCache.has(cacheKey)) {
       return wallArtworkTextureCache.get(cacheKey)!;
@@ -108,14 +110,14 @@ const WallArtwork: React.FC<WallArtworkProps> = ({
     ctx.fillStyle = '#0c0c0e';
     ctx.fillRect(0, 0, baseW, baseH);
 
-    // 2. Subtle linen weave (batched single fills)
-    ctx.fillStyle = 'rgba(32, 33, 38, 0.45)';
-    for (let x = 0; x < baseW; x += 12) {
-      ctx.fillRect(x, 0, 2, baseH);
+    // 2. Lightweight subtle linen weave
+    ctx.fillStyle = 'rgba(32, 33, 38, 0.38)';
+    for (let x = 0; x < baseW; x += 36) {
+      ctx.fillRect(x, 0, 3, baseH);
     }
     ctx.fillStyle = 'rgba(22, 23, 26, 0.22)';
-    for (let y = 0; y < baseH; y += 18) {
-      ctx.fillRect(0, y, baseW, 1.5);
+    for (let y = 0; y < baseH; y += 44) {
+      ctx.fillRect(0, y, baseW, 2);
     }
 
     // 3. Ambient vignette
@@ -140,7 +142,7 @@ const WallArtwork: React.FC<WallArtworkProps> = ({
     ctx.lineWidth = 3;
     ctx.strokeRect(44, 44, baseW - 88, baseH - 88);
 
-    // 5. Staggered Metallic Gold Typography
+    // 5. Staggered Metallic Gold Typography (crisp 1-pass dark offset shadow instead of expensive CPU shadowBlur)
     const baseFontSize = 122;
     const lineHeight = 146;
     const topStart = 338;
@@ -175,18 +177,11 @@ const WallArtwork: React.FC<WallArtworkProps> = ({
       goldGrad.addColorStop(0.75, '#b9872e');
       goldGrad.addColorStop(1.0, '#f2d68a');
 
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.65)';
-      ctx.shadowBlur = 6;
-      ctx.shadowOffsetX = 3;
-      ctx.shadowOffsetY = 4;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.72)';
+      ctx.fillText(text, drawX + 4, y + 5);
 
       ctx.fillStyle = goldGrad;
       ctx.fillText(text, drawX, y);
-
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
     };
 
     renderGoldLine(headingLine1, leftColX, topStart, false);
@@ -405,8 +400,8 @@ const credenzaStatic = typeof document !== 'undefined' ? (() => {
   const bodyGeo = new THREE.BoxGeometry(4.74, 0.54, 0.46);
   const pedestalGeo = new THREE.CylinderGeometry(0.13, 0.15, 0.12, 20);
   const pinGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.06, 12);
-  // Optimized TorusKnot segments (48x16 instead of 128x32 -> 80% fewer triangles, visually crisp)
-  const ribbonKnotGeo = new THREE.TorusKnotGeometry(0.16, 0.032, 48, 16, 2, 3);
+  // Optimized TorusKnot segments (24x10 -> 75% fewer triangles while crisp at gallery distance)
+  const ribbonKnotGeo = new THREE.TorusKnotGeometry(0.16, 0.032, 24, 10, 2, 3);
   const book1Geo = new THREE.BoxGeometry(0.46, 0.055, 0.32);
   const bookTrimGeo = new THREE.BoxGeometry(0.02, 0.05, 0.3);
   const book2Geo = new THREE.BoxGeometry(0.42, 0.048, 0.29);
@@ -506,7 +501,10 @@ const RoyalDesignerRug: React.FC<{ receiveShadow: boolean }> = ({ receiveShadow 
   const carpetTexture = useMemo(() => {
     if (typeof document === 'undefined') return null;
     const caps = detectDeviceCapabilities();
-    const res = caps.isLowEndHardware ? 512 : caps.isMobileViewport ? 768 : 1024;
+    const res = caps.isLowEndHardware || caps.isTouch ? 512 : 1024;
+    if (rugTextureCache.has(res)) {
+      return rugTextureCache.get(res)!;
+    }
     const scale = res / 2048;
 
     const canvas = document.createElement('canvas');
@@ -520,15 +518,16 @@ const RoyalDesignerRug: React.FC<{ receiveShadow: boolean }> = ({ receiveShadow 
     ctx.fillStyle = '#f0ece3';
     ctx.fillRect(0, 0, 2048, 2048);
 
+    const gridStep = res <= 512 ? 48 : 24;
     ctx.fillStyle = 'rgba(180, 170, 155, 0.16)';
-    for (let i = 0; i < 2048; i += 24) {
+    for (let i = 0; i < 2048; i += gridStep) {
       ctx.fillRect(i, 0, 3, 2048);
       ctx.fillRect(0, i, 2048, 3);
     }
 
     const drawFringes = (yStart: number) => {
       ctx.fillStyle = '#f7f4ed';
-      for (let x = 60; x < 1988; x += 14) {
+      for (let x = 60; x < 1988; x += 20) {
         ctx.fillRect(x, yStart, 4, 30);
       }
     };
@@ -676,14 +675,9 @@ const RoyalDesignerRug: React.FC<{ receiveShadow: boolean }> = ({ receiveShadow 
     texture.wrapS = THREE.ClampToEdgeWrapping;
     texture.wrapT = THREE.ClampToEdgeWrapping;
     texture.colorSpace = THREE.SRGBColorSpace;
+    rugTextureCache.set(res, texture);
     return texture;
   }, []);
-
-  useEffect(() => {
-    return () => {
-      carpetTexture?.dispose();
-    };
-  }, [carpetTexture]);
 
   return (
     <mesh position={[0, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow={receiveShadow} raycast={NO_RAYCAST}>
@@ -694,24 +688,45 @@ const RoyalDesignerRug: React.FC<{ receiveShadow: boolean }> = ({ receiveShadow 
 };
 
 // ==================================================================================
-// CORNER GOLD RING CHANDELIER (Preserved in all 4 corners, optimized shared geo & idle zero-cost loop)
+// CORNER GOLD RING CHANDELIER (Merged gold + LED meshes: 3 draw calls per corner!)
 // ==================================================================================
 const cornerChandelierStatic = typeof document !== 'undefined' ? (() => {
-  const canopyGeo = new THREE.CylinderGeometry(0.38, 0.4, 0.08, 24);
-  const ring1Geo = new THREE.TorusGeometry(1.3, 0.042, 14, 48);
-  const led1Geo = new THREE.TorusGeometry(1.3, 0.026, 10, 48);
-  const ring2Geo = new THREE.TorusGeometry(0.92, 0.038, 14, 48);
-  const led2Geo = new THREE.TorusGeometry(0.92, 0.024, 10, 48);
-  const ring3Geo = new THREE.TorusGeometry(0.62, 0.034, 14, 48);
-  const led3Geo = new THREE.TorusGeometry(0.62, 0.022, 10, 48);
-  const hitSphereGeo = new THREE.SphereGeometry(1.7, 10, 10);
+  const canopyGeo = new THREE.CylinderGeometry(0.38, 0.4, 0.08, 18);
+  const ring1Geo = new THREE.TorusGeometry(1.3, 0.042, 10, 28);
+  const led1Geo = new THREE.TorusGeometry(1.3, 0.026, 8, 28);
+  const ring2Geo = new THREE.TorusGeometry(0.92, 0.038, 10, 26);
+  const led2Geo = new THREE.TorusGeometry(0.92, 0.024, 8, 26);
+  const ring3Geo = new THREE.TorusGeometry(0.62, 0.034, 10, 24);
+  const led3Geo = new THREE.TorusGeometry(0.62, 0.022, 8, 24);
+  const hitSphereGeo = new THREE.SphereGeometry(1.7, 8, 8);
   const cableMat = new THREE.MeshStandardMaterial({ color: '#c5c7cb', metalness: 0.9, roughness: 0.2 });
 
-  // Rings sit at y = 8.4 / 7.95 / 7.5; canopy mounts cleanly on ceiling y = ROOM_HEIGHT - 0.04 (14.56)
-  const topLen = ROOM_HEIGHT - 0.08 - 8.4; // 6.12m suspension cables
+  const goldGeo = mergeTransformedParts([
+    { geo: canopyGeo, pos: [0, ROOM_HEIGHT - 0.04, 0] },
+    { geo: ring1Geo, pos: [0, 8.4, 0], rot: [0.22, 0.35, -0.15] },
+    { geo: ring2Geo, pos: [0.08, 7.95, -0.05], rot: [-0.32, -0.25, 0.28] },
+    { geo: ring3Geo, pos: [-0.05, 7.5, 0.06], rot: [0.42, 0.45, 0.35] },
+  ]);
+
+  const ledGeo = mergeTransformedParts([
+    { geo: led1Geo, pos: [0, 8.416, 0], rot: [0.22, 0.35, -0.15] },
+    { geo: led2Geo, pos: [0.08, 7.965, -0.05], rot: [-0.32, -0.25, 0.28] },
+    { geo: led3Geo, pos: [-0.05, 7.514, 0.06], rot: [0.42, 0.45, 0.35] },
+  ]);
+
+  canopyGeo.dispose();
+  ring1Geo.dispose();
+  ring2Geo.dispose();
+  ring3Geo.dispose();
+  led1Geo.dispose();
+  led2Geo.dispose();
+  led3Geo.dispose();
+
+  // Rings sit at y = 8.4 / 7.95 / 7.5; canopy mounts cleanly on ceiling y = ROOM_HEIGHT - 0.04
+  const topLen = ROOM_HEIGHT - 0.08 - 8.4;
   const topMid = 8.4 + topLen / 2;
-  const topCable = new THREE.CylinderGeometry(0.004, 0.004, topLen, 6);
-  const midCable = new THREE.CylinderGeometry(0.004, 0.004, 0.45, 6);
+  const topCable = new THREE.CylinderGeometry(0.004, 0.004, topLen, 5);
+  const midCable = new THREE.CylinderGeometry(0.004, 0.004, 0.45, 5);
 
   const cablesGeo = mergeTransformedParts([
     { geo: topCable, pos: [-0.55, topMid, -0.35] },
@@ -726,7 +741,7 @@ const cornerChandelierStatic = typeof document !== 'undefined' ? (() => {
   topCable.dispose();
   midCable.dispose();
 
-  return { canopyGeo, ring1Geo, led1Geo, ring2Geo, led2Geo, ring3Geo, led3Geo, hitSphereGeo, cableMat, cablesGeo };
+  return { goldGeo, ledGeo, hitSphereGeo, cableMat, cablesGeo };
 })() : null;
 
 interface CornerGoldRingChandelierProps {
@@ -736,9 +751,11 @@ interface CornerGoldRingChandelierProps {
 
 const CornerGoldRingChandelier: React.FC<CornerGoldRingChandelierProps> = ({ position, showLight }) => {
   const [isOn, setIsOn] = useState(true);
+  const isMobile = useGameStore((s) => s.isMobile);
   const currentLvl = useRef(1);
   const isAnimatingRef = useRef(false);
   const pointLightRef = useRef<THREE.PointLight>(null);
+  const { invalidate } = useThree();
 
   const { goldMat, ledMat } = useMemo(() => {
     const goldMat = new THREE.MeshStandardMaterial({
@@ -789,6 +806,8 @@ const CornerGoldRingChandelier: React.FC<CornerGoldRingChandelierProps> = ({ pos
       goldMat.emissiveIntensity = target * 0.5;
       if (pointLightRef.current) pointLightRef.current.intensity = target * 4.5;
       isAnimatingRef.current = false;
+    } else {
+      invalidate();
     }
   });
 
@@ -796,53 +815,36 @@ const CornerGoldRingChandelier: React.FC<CornerGoldRingChandelierProps> = ({ pos
 
   return (
     <group position={position}>
-      {/* Click target only on chandelier rings volume */}
-      <mesh
-        position={[0, 7.95, 0]}
-        geometry={cornerChandelierStatic.hitSphereGeo}
-        onClick={(e) => {
-          e.stopPropagation();
-          isAnimatingRef.current = true;
-          setIsOn((prev) => !prev);
-        }}
-        onPointerOver={(e) => {
-          e.stopPropagation();
-          document.body.style.cursor = 'pointer';
-        }}
-        onPointerOut={() => {
-          document.body.style.cursor = 'auto';
-        }}
-      >
-        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-      </mesh>
+      {/* Desktop click target only (eliminates overhead mobile pointer raycasting on ceiling fixtures) */}
+      {!isMobile && (
+        <mesh
+          position={[0, 7.95, 0]}
+          geometry={cornerChandelierStatic.hitSphereGeo}
+          onClick={(e) => {
+            e.stopPropagation();
+            isAnimatingRef.current = true;
+            setIsOn((prev) => !prev);
+            invalidate();
+          }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            document.body.style.cursor = 'pointer';
+          }}
+          onPointerOut={() => {
+            document.body.style.cursor = 'auto';
+          }}
+        >
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      )}
 
-      {/* Ceiling Canopy mounted cleanly at ROOM_HEIGHT */}
-      <mesh
-        material={goldMat}
-        position={[0, ROOM_HEIGHT - 0.04, 0]}
-        geometry={cornerChandelierStatic.canopyGeo}
-        raycast={NO_RAYCAST}
-      />
+      {/* Merged Canopy & 3 Gold Rings (1 draw call) */}
+      <mesh material={goldMat} geometry={cornerChandelierStatic.goldGeo} raycast={NO_RAYCAST} />
 
-      {/* Ring 1 */}
-      <group position={[0, 8.4, 0]} rotation={[0.22, 0.35, -0.15]}>
-        <mesh material={goldMat} geometry={cornerChandelierStatic.ring1Geo} raycast={NO_RAYCAST} />
-        <mesh material={ledMat} position={[0, 0.016, 0]} geometry={cornerChandelierStatic.led1Geo} raycast={NO_RAYCAST} />
-      </group>
+      {/* Merged 3 Glowing LED Diffuser Rings (1 draw call) */}
+      <mesh material={ledMat} geometry={cornerChandelierStatic.ledGeo} raycast={NO_RAYCAST} />
 
-      {/* Ring 2 */}
-      <group position={[0.08, 7.95, -0.05]} rotation={[-0.32, -0.25, 0.28]}>
-        <mesh material={goldMat} geometry={cornerChandelierStatic.ring2Geo} raycast={NO_RAYCAST} />
-        <mesh material={ledMat} position={[0, 0.015, 0]} geometry={cornerChandelierStatic.led2Geo} raycast={NO_RAYCAST} />
-      </group>
-
-      {/* Ring 3 */}
-      <group position={[-0.05, 7.5, 0.06]} rotation={[0.42, 0.45, 0.35]}>
-        <mesh material={goldMat} geometry={cornerChandelierStatic.ring3Geo} raycast={NO_RAYCAST} />
-        <mesh material={ledMat} position={[0, 0.014, 0]} geometry={cornerChandelierStatic.led3Geo} raycast={NO_RAYCAST} />
-      </group>
-
-      {/* Suspension Cables */}
+      {/* Suspension Cables (1 draw call) */}
       <mesh material={cornerChandelierStatic.cableMat} geometry={cornerChandelierStatic.cablesGeo} raycast={NO_RAYCAST} />
 
       {/* Consolidated single warm golden illumination per chandelier on High/Ultra */}
@@ -947,7 +949,10 @@ const EuropeanOakHardwoodFloor: React.FC<{ receiveShadow: boolean }> = ({ receiv
   const oakTexture = useMemo(() => {
     if (typeof document === 'undefined') return null;
     const caps = detectDeviceCapabilities();
-    const res = caps.isLowEndHardware ? 512 : 1024;
+    const res = caps.isLowEndHardware || caps.isTouch ? 512 : 1024;
+    if (oakTextureCache.has(res)) {
+      return oakTextureCache.get(res)!;
+    }
     const scale = res / 1024;
 
     const canvas = document.createElement('canvas');
@@ -969,6 +974,7 @@ const EuropeanOakHardwoodFloor: React.FC<{ receiveShadow: boolean }> = ({ receiv
       return seed / 233280;
     };
 
+    const fibersPerPlank = res <= 512 ? 7 : 14;
     for (let r = 0; r < numRows; r++) {
       const y = r * rowHeight;
       const offsets = [0];
@@ -994,13 +1000,13 @@ const EuropeanOakHardwoodFloor: React.FC<{ receiveShadow: boolean }> = ({ receiv
 
         const darkFibers = new Path2D();
         const lightFibers = new Path2D();
-        for (let f = 0; f < 14; f++) {
-          const fy = y + (f / 14) * rowHeight + (random() - 0.5) * 2;
+        for (let f = 0; f < fibersPerPlank; f++) {
+          const fy = y + (f / fibersPerPlank) * rowHeight + (random() - 0.5) * 2;
           const targetPath = random() > 0.45 ? darkFibers : lightFibers;
           targetPath.moveTo(x1, fy);
           const waveFreq = 0.016 + random() * 0.012;
           const waveAmp = 1.0 + random() * 2.0;
-          for (let wx = x1 + 32; wx <= x2; wx += 32) {
+          for (let wx = x1 + 48; wx <= x2; wx += 48) {
             targetPath.lineTo(wx, fy + Math.sin(wx * waveFreq + r) * waveAmp);
           }
         }
@@ -1015,7 +1021,7 @@ const EuropeanOakHardwoodFloor: React.FC<{ receiveShadow: boolean }> = ({ receiv
         if (random() > 0.65) {
           const cathCenter = x1 + pWidth * (0.3 + random() * 0.4);
           const cathY = y + rowHeight * (0.4 + random() * 0.2);
-          for (let c = 6; c <= 28; c += 7) {
+          for (let c = 6; c <= 28; c += 8) {
             ctx.strokeStyle = `rgba(80, 50, 24, ${0.14 + random() * 0.10})`;
             ctx.lineWidth = 1.0;
             ctx.beginPath();
@@ -1058,16 +1064,11 @@ const EuropeanOakHardwoodFloor: React.FC<{ receiveShadow: boolean }> = ({ receiv
     texture.repeat.set(5.625, 5.625);
     texture.generateMipmaps = true;
     texture.minFilter = THREE.LinearMipmapLinearFilter;
-    texture.anisotropy = caps.isTouch ? 4 : 8;
+    texture.anisotropy = caps.isTouch ? 2 : 8;
     texture.colorSpace = THREE.SRGBColorSpace;
+    oakTextureCache.set(res, texture);
     return texture;
   }, []);
-
-  useEffect(() => {
-    return () => {
-      oakTexture?.dispose();
-    };
-  }, [oakTexture]);
 
   return (
     <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow={receiveShadow} raycast={NO_RAYCAST}>
@@ -1231,9 +1232,9 @@ export const RoomEnvironment: React.FC = () => {
 
   return (
     <group>
-      {/* Consolidated Adaptive Gallery Lighting (4 lights on low/medium, 8 on high, 16 on ultra vs 41 previously!) */}
-      <hemisphereLight color="#ffffff" groundColor="#dcd4c8" intensity={showCornerLights ? 0.72 : 0.92} />
-      <ambientLight color="#fdfaf4" intensity={showCornerLights ? 0.42 : 0.52} />
+      {/* Consolidated Adaptive Gallery Lighting (3 lights on low, 4 on medium, 8 on high, 17 on ultra) */}
+      <hemisphereLight color="#ffffff" groundColor="#dcd4c8" intensity={showCornerLights ? 0.72 : 0.94} />
+      <ambientLight color="#fdfaf4" intensity={showCornerLights ? 0.42 : 0.56} />
 
       {/* Primary Overhead Chessboard Key Light — Replaces central white chandelier light while removing its obstructing body */}
       <directionalLight
@@ -1253,14 +1254,16 @@ export const RoomEnvironment: React.FC = () => {
         shadow-normalBias={0.02}
       />
 
-      {/* Soft Counter-Fill Key for Balanced Piece Modeling */}
-      <directionalLight position={[-6, 10, -5]} color="#f2e8d8" intensity={0.42} />
+      {/* Soft Counter-Fill Key for Balanced Piece Modeling (skipped on low Performance tier to minimize PBR fragment loop) */}
+      {graphicsQuality !== 'low' && (
+        <directionalLight position={[-6, 10, -5]} color="#f2e8d8" intensity={0.42} />
+      )}
 
       {/* Floor & Luxury Rug */}
       <EuropeanOakHardwoodFloor receiveShadow={shadowsEnabled} />
       <RoyalDesignerRug receiveShadow={shadowsEnabled} />
 
-      {/* Cached Floor Contact Shadow (disabled on Performance 'low' for maximum speed; frames={1} otherwise) */}
+      {/* Cached Floor Contact Shadow (disabled on Performance 'low'; resolution scales cleanly by tier) */}
       {graphicsQuality !== 'low' && (
         <ContactShadows
           position={[0, 0.02, 0]}
@@ -1269,7 +1272,7 @@ export const RoomEnvironment: React.FC = () => {
           blur={1.6}
           far={5}
           frames={1}
-          resolution={graphicsQuality === 'medium' ? 256 : 512}
+          resolution={graphicsQuality === 'medium' ? 128 : graphicsQuality === 'high' ? 256 : 512}
           color="#1f2124"
         />
       )}

@@ -49,7 +49,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenHowToP
       <div className="flex items-start justify-between w-full gap-2 pointer-events-none">
         {/* Branding Header */}
         <div className="pointer-events-auto flex flex-col items-start max-w-xs sm:max-w-md animate-fade-in mt-0.5 sm:mt-0">
-          <div className="flex items-center gap-2 px-3 py-0.5 sm:px-3.5 sm:py-1 rounded-full bg-white/85 border border-[#c6a45c]/40 text-[#c6a45c] text-[10px] sm:text-xs font-serif font-bold tracking-widest uppercase mb-1.5 sm:mb-3 shadow-sm backdrop-blur-md">
+          <div className="flex items-center gap-2 px-3 py-0.5 sm:px-3.5 sm:py-1 rounded-full bg-white/95 border border-[#c6a45c]/40 text-[#c6a45c] text-[10px] sm:text-xs font-serif font-bold tracking-widest uppercase mb-1.5 sm:mb-3 shadow-sm lg:backdrop-blur-md">
             <Sparkles className="w-3.5 h-3.5" />
             <span>Royal 3D Chess Arena</span>
           </div>
@@ -70,7 +70,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenHowToP
               soundManager.playClick();
               onOpenHowToPlay();
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white border border-[#c6a45c]/35 hover:border-[#c6a45c] text-[#202226] text-xs font-serif font-bold shadow-sm backdrop-blur-md cursor-pointer transition-all active:scale-95 min-h-[38px]"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/95 hover:bg-white border border-[#c6a45c]/35 hover:border-[#c6a45c] text-[#202226] text-xs font-serif font-bold shadow-sm lg:backdrop-blur-md cursor-pointer transition-all active:scale-95 min-h-[38px]"
             title="How to Play Chess & Camera Controls"
           >
             <BookOpen className="w-3.5 h-3.5 text-[#c6a45c]" />
@@ -82,7 +82,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenHowToP
               soundManager.playClick();
               onOpenSettings();
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white border border-[#c6a45c]/35 hover:border-[#c6a45c] text-[#202226] text-xs font-serif font-bold shadow-sm backdrop-blur-md cursor-pointer transition-all active:scale-95 min-h-[38px]"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/95 hover:bg-white border border-[#c6a45c]/35 hover:border-[#c6a45c] text-[#202226] text-xs font-serif font-bold shadow-sm lg:backdrop-blur-md cursor-pointer transition-all active:scale-95 min-h-[38px]"
             title="Graphics & Sound Settings"
           >
             <Settings className="w-3.5 h-3.5 text-[#666762]" />
@@ -99,7 +99,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenHowToP
             soundManager.playClick();
             setShowAiSetup(true);
           }}
-          className="group relative flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-[#f7f7f4]/95 backdrop-blur-md border border-[#c6a45c]/35 hover:border-[#c6a45c] hover:bg-white transition-all duration-300 shadow-royal-card active:scale-95 cursor-pointer min-h-[48px]"
+          className="group relative flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-[#f7f7f4]/95 lg:backdrop-blur-md border border-[#c6a45c]/35 hover:border-[#c6a45c] hover:bg-white transition-all duration-300 shadow-royal-card active:scale-95 cursor-pointer min-h-[48px]"
         >
           <div className="flex items-center gap-3">
             <div className="p-2 sm:p-2.5 rounded-xl bg-[#c6a45c]/15 border border-[#c6a45c]/30 text-[#c6a45c] group-hover:scale-110 transition-transform">
@@ -120,7 +120,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenHowToP
         {/* PLAY WITH FRIEND */}
         <button
           onClick={handleOpenMultiplayer}
-          className="group relative flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-[#f7f7f4]/95 backdrop-blur-md border border-[#c6a45c]/35 hover:border-[#c6a45c] hover:bg-white transition-all duration-300 shadow-royal-card active:scale-95 cursor-pointer min-h-[48px]"
+          className="group relative flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-[#f7f7f4]/95 lg:backdrop-blur-md border border-[#c6a45c]/35 hover:border-[#c6a45c] hover:bg-white transition-all duration-300 shadow-royal-card active:scale-95 cursor-pointer min-h-[48px]"
         >
           <div className="flex items-center gap-3">
             <div className="p-2 sm:p-2.5 rounded-xl bg-[#666762]/10 border border-[#666762]/25 text-[#202226] group-hover:scale-110 transition-transform">
@@ -145,7 +145,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenHowToP
               soundManager.playClick();
               onOpenHowToPlay();
             }}
-            className="flex items-center justify-center gap-1.5 p-3 rounded-xl bg-[#f7f7f4]/95 backdrop-blur-md border border-[#c6a45c]/30 hover:border-[#c6a45c] hover:bg-white text-xs font-semibold text-[#202226] hover:text-[#c6a45c] transition-all cursor-pointer shadow-royal-card active:scale-95 min-h-[44px]"
+            className="flex items-center justify-center gap-1.5 p-3 rounded-xl bg-[#f7f7f4]/95 lg:backdrop-blur-md border border-[#c6a45c]/30 hover:border-[#c6a45c] hover:bg-white text-xs font-semibold text-[#202226] hover:text-[#c6a45c] transition-all cursor-pointer shadow-royal-card active:scale-95 min-h-[44px]"
           >
             <BookOpen className="w-4 h-4 text-[#c6a45c]" />
             <span>HOW TO PLAY</span>
@@ -156,7 +156,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenHowToP
               soundManager.playClick();
               onOpenSettings();
             }}
-            className="flex items-center justify-center gap-1.5 p-3 rounded-xl bg-[#f7f7f4]/95 backdrop-blur-md border border-[#c6a45c]/30 hover:border-[#c6a45c] hover:bg-white text-xs font-semibold text-[#202226] hover:text-[#c6a45c] transition-all cursor-pointer shadow-royal-card active:scale-95 min-h-[44px]"
+            className="flex items-center justify-center gap-1.5 p-3 rounded-xl bg-[#f7f7f4]/95 lg:backdrop-blur-md border border-[#c6a45c]/30 hover:border-[#c6a45c] hover:bg-white text-xs font-semibold text-[#202226] hover:text-[#c6a45c] transition-all cursor-pointer shadow-royal-card active:scale-95 min-h-[44px]"
           >
             <Settings className="w-4 h-4 text-[#666762]" />
             <span>SETTINGS</span>

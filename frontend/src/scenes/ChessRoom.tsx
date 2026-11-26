@@ -8,9 +8,10 @@ import { useGameStore, checkIsMobile } from '../store/gameStore';
 import { detectDeviceCapabilities } from '../utils/deviceTier';
 
 /**
- * Adaptive Performance Watcher (Fixed rolling delta accumulator — zero Clock side-effects)
- * Evaluates actual sustained FPS across 1.5s windows. If average FPS stays below 28 FPS
- * across 3 consecutive windows (~4.5s), smoothly degrades graphics profile to protect smoothness.
+ * Adaptive Performance Watcher (Safe for both 'always' and 'demand' render loops)
+ * Measures active sustained frame rate over 1.0s windows (ignoring idle demand gaps).
+ * If sustained active FPS stays below 30 FPS across 2 consecutive windows (~2-3s),
+ * smoothly degrades graphics tier to preserve responsiveness without sudden visual popping.
  */
 const AdaptivePerformanceWatcher: React.FC = () => {
   const adaptiveQualityDegrade = useGameStore((s) => s.adaptiveQualityDegrade);
@@ -18,10 +19,10 @@ const AdaptivePerformanceWatcher: React.FC = () => {
   const lowFpsStreakRef = useRef(0);
   const accumTimeRef = useRef(0);
   const frameCountRef = useRef(0);
-  const warmupRef = useRef(2.0); // Skip first 2s of initial shader compile
+  const warmupRef = useRef(1.2);
 
   useEffect(() => {
-    warmupRef.current = 1.5;
+    warmupRef.current = 1.0;
     lowFpsStreakRef.current = 0;
     accumTimeRef.current = 0;
     frameCountRef.current = 0;
@@ -29,7 +30,7 @@ const AdaptivePerformanceWatcher: React.FC = () => {
 
   useFrame((_, delta) => {
     if (graphicsQuality === 'low') return;
-    // Ignore tab-switch or huge stall spikes when deciding sustained FPS
+    // Ignore idle demand-mode gaps, tab-switches, or background stalls
     if (delta > 0.25) return;
 
     if (warmupRef.current > 0) {
@@ -40,18 +41,20 @@ const AdaptivePerformanceWatcher: React.FC = () => {
     accumTimeRef.current += delta;
     frameCountRef.current += 1;
 
-    if (accumTimeRef.current >= 1.5) {
+    if (accumTimeRef.current >= 1.0) {
       const avgFps = frameCountRef.current / accumTimeRef.current;
+      const sampleCount = frameCountRef.current;
       accumTimeRef.current = 0;
       frameCountRef.current = 0;
 
-      if (avgFps < 28) {
+      // Require >= 8 active frames in the window so sparse demand wakeups don't skew FPS
+      if (sampleCount >= 8 && avgFps < 30) {
         lowFpsStreakRef.current += 1;
-        if (lowFpsStreakRef.current >= 3) {
+        if (lowFpsStreakRef.current >= 2) {
           adaptiveQualityDegrade();
           lowFpsStreakRef.current = 0;
         }
-      } else {
+      } else if (sampleCount >= 8) {
         lowFpsStreakRef.current = Math.max(0, lowFpsStreakRef.current - 1);
       }
     }
@@ -61,10 +64,13 @@ const AdaptivePerformanceWatcher: React.FC = () => {
 };
 
 /**
- * Dynamically configures WebGL ShadowMap type & resource hints without recreating Canvas
+ * Dynamically configures WebGL ShadowMap type & invalidates on quality shifts
  */
-const RendererTuner: React.FC<{ useSoftShadows: boolean }> = ({ useSoftShadows }) => {
-  const { gl } = useThree();
+const RendererTuner: React.FC<{ useSoftShadows: boolean; graphicsQuality: string }> = ({
+  useSoftShadows,
+  graphicsQuality,
+}) => {
+  const { gl, invalidate } = useThree();
 
   useEffect(() => {
     const desiredType = useSoftShadows ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
@@ -72,13 +78,15 @@ const RendererTuner: React.FC<{ useSoftShadows: boolean }> = ({ useSoftShadows }
       gl.shadowMap.type = desiredType;
       gl.shadowMap.needsUpdate = true;
     }
-  }, [gl, useSoftShadows]);
+    invalidate();
+  }, [gl, useSoftShadows, graphicsQuality, invalidate]);
 
   return null;
 };
 
 export const ChessRoom: React.FC = () => {
   const graphicsQuality = useGameStore((s) => s.graphicsQuality);
+  const gameMode = useGameStore((s) => s.gameMode);
   const isMobile = useGameStore((s) => s.isMobile);
   const setIsMobile = useGameStore((s) => s.setIsMobile);
   const [isTabVisible, setIsTabVisible] = useState(true);
@@ -105,7 +113,7 @@ export const ChessRoom: React.FC = () => {
     };
   }, [setIsMobile]);
 
-  // Tab visibility management: pause rendering when backgrounded to conserve battery & avoid throttling
+  // Tab visibility management: pause rendering when backgrounded to conserve battery & prevent throttling
   useEffect(() => {
     const handleVisibilityChange = () => {
       setIsTabVisible(!document.hidden);
@@ -126,29 +134,29 @@ export const ChessRoom: React.FC = () => {
     };
   }, []);
 
-  // Compute safe DPR bounded by both device capability & total GPU pixel budget
-  // (prevents 3x mobile OLED screens or "Desktop Site" mode from exploding fillrate)
+  const caps = useMemo(() => detectDeviceCapabilities(), []);
+  const isTouchOrMobile = caps.isTouch || isMobile;
+
+  // Tightly calibrated DPR & GPU pixel budget per tier (protects mobile fillrate & Desktop-Mode mobile browsers)
   const dpr: [number, number] = useMemo(() => {
-    const caps = detectDeviceCapabilities();
-    const isTouchOrMobile = caps.isTouch || isMobile;
     const w = Math.max(320, viewportSize.w);
     const h = Math.max(320, viewportSize.h);
     const nativeDpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
 
-    let maxPixelBudget = 2.2e6;
-    let targetMaxDpr = 1.2;
+    let maxPixelBudget = 2.0e6;
+    let targetMaxDpr = 1.25;
 
     if (graphicsQuality === 'low') {
-      maxPixelBudget = isTouchOrMobile ? 1.1e6 : 1.6e6;
+      maxPixelBudget = isTouchOrMobile ? 0.85e6 : 1.4e6;
       targetMaxDpr = 1.0;
     } else if (graphicsQuality === 'medium') {
-      maxPixelBudget = isTouchOrMobile ? 1.65e6 : 2.2e6;
+      maxPixelBudget = isTouchOrMobile ? 1.35e6 : 2.0e6;
       targetMaxDpr = isTouchOrMobile ? 1.15 : 1.25;
     } else if (graphicsQuality === 'high') {
-      maxPixelBudget = isTouchOrMobile ? 2.2e6 : 3.2e6;
+      maxPixelBudget = isTouchOrMobile ? 1.85e6 : 3.0e6;
       targetMaxDpr = isTouchOrMobile ? 1.35 : 1.5;
     } else {
-      maxPixelBudget = isTouchOrMobile ? 2.4e6 : 4.0e6;
+      maxPixelBudget = isTouchOrMobile ? 2.2e6 : 4.0e6;
       targetMaxDpr = isTouchOrMobile ? 1.5 : 2.0;
     }
 
@@ -160,7 +168,7 @@ export const ChessRoom: React.FC = () => {
     }
 
     return [1, Number(desiredDpr.toFixed(2))];
-  }, [isMobile, graphicsQuality, viewportSize.w, viewportSize.h]);
+  }, [isTouchOrMobile, graphicsQuality, viewportSize.w, viewportSize.h]);
 
   const handleCreated = ({ gl }: { gl: THREE.WebGLRenderer }) => {
     const canvas = gl.domElement;
@@ -185,12 +193,17 @@ export const ChessRoom: React.FC = () => {
 
   const shadowEnabled = graphicsQuality !== 'low';
   const useSoftShadows = graphicsQuality === 'high' || graphicsQuality === 'ultra';
-  const useAntialias = graphicsQuality === 'high' || graphicsQuality === 'ultra' || (!isMobile && graphicsQuality !== 'low');
+  // Disable heavy MSAA on Performance ('low') and touch Balanced ('medium') to prevent tile-GPU stalls
+  const useAntialias =
+    graphicsQuality === 'high' || graphicsQuality === 'ultra' || (!isTouchOrMobile && graphicsQuality !== 'low');
+  // Use demand rendering on Menu, Performance ('low'), and Balanced ('medium') so idle scenes burn 0 GPU cycles
+  // while active gestures, piece moves, AI moves, and camera transitions wake instantaneously via invalidate().
+  const useDemandLoop = gameMode === 'menu' || graphicsQuality === 'low' || graphicsQuality === 'medium';
 
   return (
     <div className="absolute inset-0 w-full h-full select-none overflow-hidden bg-[#141518] touch-none">
       <Canvas
-        frameloop={isTabVisible && !contextLost ? 'always' : 'never'}
+        frameloop={!isTabVisible || contextLost ? 'never' : useDemandLoop ? 'demand' : 'always'}
         shadows={shadowEnabled}
         dpr={dpr}
         camera={{ position: [0, 4.25, 7.6], fov: 56, near: 0.25, far: 85 }}
@@ -205,7 +218,7 @@ export const ChessRoom: React.FC = () => {
         }}
       >
         <color attach="background" args={['#141518']} />
-        <RendererTuner useSoftShadows={useSoftShadows} />
+        <RendererTuner useSoftShadows={useSoftShadows} graphicsQuality={graphicsQuality} />
         <Suspense fallback={null}>
           <RoomEnvironment />
           <ChessBoard3D />

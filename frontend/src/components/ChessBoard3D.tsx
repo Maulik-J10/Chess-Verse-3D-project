@@ -1,5 +1,5 @@
 import React, { useRef, useMemo, useEffect } from 'react';
-import { useFrame, ThreeEvent } from '@react-three/fiber';
+import { useFrame, useThree, ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
 import { ChessPiece3D } from './ChessPiece3D';
@@ -105,6 +105,12 @@ export const ChessBoard3D: React.FC = () => {
   const selectSquare = useGameStore((s) => s.selectSquare);
   const graphicsQuality = useGameStore((s) => s.graphicsQuality);
   const isMobile = useGameStore((s) => s.isMobile);
+  const { invalidate } = useThree();
+
+  // Wake demand renderer immediately whenever board highlights or quality settings change
+  useEffect(() => {
+    invalidate();
+  }, [pieces, selectedSquare, legalMoves, lastMove, kingInCheckSquare, showLegalMoves, graphicsQuality, invalidate]);
 
   // Initialize 32 light + 32 dark instanced square transforms once
   useEffect(() => {
@@ -132,9 +138,15 @@ export const ChessBoard3D: React.FC = () => {
     if (darkInstancedRef.current) darkInstancedRef.current.instanceMatrix.needsUpdate = true;
   }, []);
 
-  // Subtle slow floating levitation without touching Three.Clock.getElapsedTime()
+  // Subtle slow floating levitation on High/Ultra (settled cleanly at 1.35m on Performance/Balanced demand tiers)
   useFrame((_, delta) => {
     if (!boardGroupRef.current) return;
+    if (graphicsQuality === 'low' || graphicsQuality === 'medium') {
+      if (boardGroupRef.current.position.y !== 1.35) {
+        boardGroupRef.current.position.y = 1.35;
+      }
+      return;
+    }
     floatTimeRef.current += delta;
     boardGroupRef.current.position.y = 1.35 + Math.sin(floatTimeRef.current * 0.85) * 0.035;
   });
