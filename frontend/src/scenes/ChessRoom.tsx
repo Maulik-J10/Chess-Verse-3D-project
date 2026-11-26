@@ -1,43 +1,78 @@
-import React, { Suspense, useEffect, useState, useRef } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import React, { Suspense, useEffect, useState, useRef, useMemo } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { RoomEnvironment } from '../components/RoomEnvironment';
 import { ChessBoard3D } from '../components/ChessBoard3D';
 import { CameraController } from '../components/CameraController';
 import { useGameStore, checkIsMobile } from '../store/gameStore';
+import { detectDeviceCapabilities } from '../utils/deviceTier';
 
 /**
- * Adaptive Performance Watcher
- * Smoothly monitors frame time on mobile/low-end devices.
- * If frame rate stays below 28 FPS for 4+ consecutive seconds,
- * gracefully steps down graphics profile to preserve responsiveness.
+ * Adaptive Performance Watcher (Fixed rolling delta accumulator — zero Clock side-effects)
+ * Evaluates actual sustained FPS across 1.5s windows. If average FPS stays below 28 FPS
+ * across 3 consecutive windows (~4.5s), smoothly degrades graphics profile to protect smoothness.
  */
 const AdaptivePerformanceWatcher: React.FC = () => {
   const adaptiveQualityDegrade = useGameStore((s) => s.adaptiveQualityDegrade);
   const graphicsQuality = useGameStore((s) => s.graphicsQuality);
-  const lowFpsCountRef = useRef(0);
-  const lastCheckTimeRef = useRef(0);
+  const lowFpsStreakRef = useRef(0);
+  const accumTimeRef = useRef(0);
+  const frameCountRef = useRef(0);
+  const warmupRef = useRef(2.0); // Skip first 2s of initial shader compile
 
-  useFrame((state) => {
-    // Only monitor if not already at lowest profile
+  useEffect(() => {
+    warmupRef.current = 1.5;
+    lowFpsStreakRef.current = 0;
+    accumTimeRef.current = 0;
+    frameCountRef.current = 0;
+  }, [graphicsQuality]);
+
+  useFrame((_, delta) => {
     if (graphicsQuality === 'low') return;
+    // Ignore tab-switch or huge stall spikes when deciding sustained FPS
+    if (delta > 0.25) return;
 
-    const time = state.clock.getElapsedTime();
-    if (time - lastCheckTimeRef.current > 1.0) {
-      lastCheckTimeRef.current = time;
-      // Normal frame interval at 60fps is ~16ms (0.016s); 28fps is ~35ms
-      const delta = state.clock.getDelta();
-      if (delta > 0.038) {
-        lowFpsCountRef.current += 1;
-        if (lowFpsCountRef.current >= 4) {
+    if (warmupRef.current > 0) {
+      warmupRef.current -= delta;
+      return;
+    }
+
+    accumTimeRef.current += delta;
+    frameCountRef.current += 1;
+
+    if (accumTimeRef.current >= 1.5) {
+      const avgFps = frameCountRef.current / accumTimeRef.current;
+      accumTimeRef.current = 0;
+      frameCountRef.current = 0;
+
+      if (avgFps < 28) {
+        lowFpsStreakRef.current += 1;
+        if (lowFpsStreakRef.current >= 3) {
           adaptiveQualityDegrade();
-          lowFpsCountRef.current = 0;
+          lowFpsStreakRef.current = 0;
         }
       } else {
-        lowFpsCountRef.current = Math.max(0, lowFpsCountRef.current - 1);
+        lowFpsStreakRef.current = Math.max(0, lowFpsStreakRef.current - 1);
       }
     }
   });
+
+  return null;
+};
+
+/**
+ * Dynamically configures WebGL ShadowMap type & resource hints without recreating Canvas
+ */
+const RendererTuner: React.FC<{ useSoftShadows: boolean }> = ({ useSoftShadows }) => {
+  const { gl } = useThree();
+
+  useEffect(() => {
+    const desiredType = useSoftShadows ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    if (gl.shadowMap.type !== desiredType) {
+      gl.shadowMap.type = desiredType;
+      gl.shadowMap.needsUpdate = true;
+    }
+  }, [gl, useSoftShadows]);
 
   return null;
 };
@@ -47,11 +82,20 @@ export const ChessRoom: React.FC = () => {
   const isMobile = useGameStore((s) => s.isMobile);
   const setIsMobile = useGameStore((s) => s.setIsMobile);
   const [isTabVisible, setIsTabVisible] = useState(true);
+  const [contextLost, setContextLost] = useState(false);
+  const [viewportSize, setViewportSize] = useState(() => ({
+    w: typeof window !== 'undefined' ? window.innerWidth : 1280,
+    h: typeof window !== 'undefined' ? window.innerHeight : 720,
+  }));
 
-  // Monitor resize & orientation changes
+  const canvasDomRef = useRef<HTMLCanvasElement | null>(null);
+  const contextCleanupRef = useRef<(() => void) | null>(null);
+
+  // Monitor resize & orientation changes cleanly
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(checkIsMobile());
+      setViewportSize({ w: window.innerWidth, h: window.innerHeight });
     };
     window.addEventListener('resize', handleResize, { passive: true });
     window.addEventListener('orientationchange', handleResize, { passive: true });
@@ -61,7 +105,7 @@ export const ChessRoom: React.FC = () => {
     };
   }, [setIsMobile]);
 
-  // Tab visibility management: pause rendering when tab is hidden to save mobile battery
+  // Tab visibility management: pause rendering when backgrounded to conserve battery & avoid throttling
   useEffect(() => {
     const handleVisibilityChange = () => {
       setIsTabVisible(!document.hidden);
@@ -72,75 +116,87 @@ export const ChessRoom: React.FC = () => {
     };
   }, []);
 
-  // Compute DPR safely clamped: guarantees mobile hardware and desktop-mode never exceed GPU fillrate
-  const dpr: [number, number] = React.useMemo(() => {
-    const isTouch =
-      typeof window !== 'undefined' &&
-      (navigator.maxTouchPoints > 0 ||
-        window.matchMedia('(pointer: coarse)').matches ||
-        /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+  // Cleanup WebGL context listeners on unmount
+  useEffect(() => {
+    return () => {
+      if (contextCleanupRef.current) {
+        contextCleanupRef.current();
+        contextCleanupRef.current = null;
+      }
+    };
+  }, []);
 
-    const w = typeof window !== 'undefined' ? window.innerWidth : 1280;
-    const h = typeof window !== 'undefined' ? window.innerHeight : 720;
+  // Compute safe DPR bounded by both device capability & total GPU pixel budget
+  // (prevents 3x mobile OLED screens or "Desktop Site" mode from exploding fillrate)
+  const dpr: [number, number] = useMemo(() => {
+    const caps = detectDeviceCapabilities();
+    const isTouchOrMobile = caps.isTouch || isMobile;
+    const w = Math.max(320, viewportSize.w);
+    const h = Math.max(320, viewportSize.h);
     const nativeDpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
 
-    // Hard ceiling on total rendered pixels to prevent GPU memory saturation / freezes:
-    // Touch/mobile devices (including desktop-mode on phones): max 2.2 million pixels
-    // Real desktop PCs: up to 4.0 million pixels
-    const maxPixelBudget = isTouch ? 2.2e6 : 4.0e6;
+    let maxPixelBudget = 2.2e6;
+    let targetMaxDpr = 1.2;
 
-    let targetDpr = 1.0;
-    if (isTouch || isMobile) {
-      if (graphicsQuality === 'low') targetDpr = 1.0;
-      else if (graphicsQuality === 'medium') targetDpr = 1.15;
-      else if (graphicsQuality === 'high') targetDpr = 1.35;
-      else targetDpr = 1.5;
+    if (graphicsQuality === 'low') {
+      maxPixelBudget = isTouchOrMobile ? 1.1e6 : 1.6e6;
+      targetMaxDpr = 1.0;
+    } else if (graphicsQuality === 'medium') {
+      maxPixelBudget = isTouchOrMobile ? 1.65e6 : 2.2e6;
+      targetMaxDpr = isTouchOrMobile ? 1.15 : 1.25;
+    } else if (graphicsQuality === 'high') {
+      maxPixelBudget = isTouchOrMobile ? 2.2e6 : 3.2e6;
+      targetMaxDpr = isTouchOrMobile ? 1.35 : 1.5;
     } else {
-      if (graphicsQuality === 'low') targetDpr = 1.0;
-      else if (graphicsQuality === 'medium') targetDpr = 1.25;
-      else if (graphicsQuality === 'high') targetDpr = 1.5;
-      else targetDpr = 2.0;
+      maxPixelBudget = isTouchOrMobile ? 2.4e6 : 4.0e6;
+      targetMaxDpr = isTouchOrMobile ? 1.5 : 2.0;
     }
 
-    const effectiveDpr = Math.min(nativeDpr, targetDpr);
-    const totalPixels = w * h * effectiveDpr * effectiveDpr;
-
-    if (totalPixels > maxPixelBudget) {
+    const desiredDpr = Math.min(nativeDpr, targetMaxDpr);
+    const pixels = w * h * desiredDpr * desiredDpr;
+    if (pixels > maxPixelBudget) {
       const clamped = Math.sqrt(maxPixelBudget / (w * h));
-      const finalMax = Math.max(1.0, Math.min(clamped, effectiveDpr));
-      return [1, Number(finalMax.toFixed(2))];
+      return [1, Math.max(1.0, Number(Math.min(desiredDpr, clamped).toFixed(2)))];
     }
 
-    return [1, Number(effectiveDpr.toFixed(2))];
-  }, [isMobile, graphicsQuality]);
+    return [1, Number(desiredDpr.toFixed(2))];
+  }, [isMobile, graphicsQuality, viewportSize.w, viewportSize.h]);
 
-  // Handle WebGL context recovery to prevent black screen / freeze after memory pressure
   const handleCreated = ({ gl }: { gl: THREE.WebGLRenderer }) => {
     const canvas = gl.domElement;
-    const handleContextLost = (e: Event) => {
+    canvasDomRef.current = canvas;
+    if (contextCleanupRef.current) {
+      contextCleanupRef.current();
+    }
+    const handleLost = (e: Event) => {
       e.preventDefault();
-      console.warn('ChessVerse: WebGL context lost. Pausing until GPU restores.');
+      setContextLost(true);
     };
-    const handleContextRestored = () => {
-      console.info('ChessVerse: WebGL context restored.');
+    const handleRestored = () => {
+      setContextLost(false);
     };
-    canvas.addEventListener('webglcontextlost', handleContextLost, false);
-    canvas.addEventListener('webglcontextrestored', handleContextRestored, false);
+    canvas.addEventListener('webglcontextlost', handleLost, false);
+    canvas.addEventListener('webglcontextrestored', handleRestored, false);
+    contextCleanupRef.current = () => {
+      canvas.removeEventListener('webglcontextlost', handleLost, false);
+      canvas.removeEventListener('webglcontextrestored', handleRestored, false);
+    };
   };
 
-  // Shadows enabled by default on desktop; on mobile enabled for medium/high/ultra
   const shadowEnabled = graphicsQuality !== 'low';
+  const useSoftShadows = graphicsQuality === 'high' || graphicsQuality === 'ultra';
+  const useAntialias = graphicsQuality === 'high' || graphicsQuality === 'ultra' || (!isMobile && graphicsQuality !== 'low');
 
   return (
-    <div className="absolute inset-0 w-full h-full select-none overflow-hidden bg-[#eeede8] touch-none">
+    <div className="absolute inset-0 w-full h-full select-none overflow-hidden bg-[#141518] touch-none">
       <Canvas
-        frameloop={isTabVisible ? 'always' : 'never'}
+        frameloop={isTabVisible && !contextLost ? 'always' : 'never'}
         shadows={shadowEnabled}
         dpr={dpr}
-        camera={{ position: [0, 4.25, 7.6], fov: 56 }}
+        camera={{ position: [0, 4.25, 7.6], fov: 56, near: 0.25, far: 85 }}
         onCreated={handleCreated}
         gl={{
-          antialias: graphicsQuality !== 'low',
+          antialias: useAntialias,
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: 1.05,
           powerPreference: 'high-performance',
@@ -148,6 +204,8 @@ export const ChessRoom: React.FC = () => {
           depth: true,
         }}
       >
+        <color attach="background" args={['#141518']} />
+        <RendererTuner useSoftShadows={useSoftShadows} />
         <Suspense fallback={null}>
           <RoomEnvironment />
           <ChessBoard3D />

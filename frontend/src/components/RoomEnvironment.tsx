@@ -1,28 +1,81 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { ContactShadows } from '@react-three/drei';
 import { useGameStore } from '../store/gameStore';
+import { mergeTransformedParts, NO_RAYCAST } from '../utils/geometryUtils';
+import { detectDeviceCapabilities } from '../utils/deviceTier';
 
 // ==================================================================================
-// WALL ARTWORK — Exactly like the provided reference photo:
-// "STAY SIMPLE / STAY TRUE" staggered typography in gold metallic foil on textured black canvas
-// with floating dark shadowbox frame and dedicated overhead downlight spotlight.
-// NO Z-FIGHTING: Canvas is offset with polygonOffset and explicit renderOrder.
+// SHARED ROOM CONSTANTS (Expanded 36m x 36m x 14.6m Stately Gallery Architecture)
+// Gives generous headroom & wall clearance so camera NEVER exits walls or hits ceiling
+// while keeping default desktop framing visually identical to baseline.
+// ==================================================================================
+export const ROOM_HALF_SIZE = 18.0;
+export const ROOM_SIZE = 36.0;
+export const ROOM_HEIGHT = 14.6;
+export const CORNER_CHANDELIER_OFFSET = 12.8;
+
+// Shared texture cache for central WallArtwork across mounts
+const wallArtworkTextureCache = new Map<string, THREE.CanvasTexture>();
+
+// Singleton shared materials & merged geometries for WallArtwork frames
+const wallArtStatic = typeof document !== 'undefined' ? (() => {
+  const frameMat = new THREE.MeshStandardMaterial({ color: '#16171a', metalness: 0.4, roughness: 0.4 });
+  const goldMat = new THREE.MeshStandardMaterial({
+    color: '#d4af37',
+    metalness: 0.94,
+    roughness: 0.16,
+    emissive: '#6e4d0d',
+    emissiveIntensity: 0.3,
+  });
+  const backMat = new THREE.MeshStandardMaterial({ color: '#08080a', roughness: 0.9 });
+
+  const width = 3.8;
+  const height = 5.0;
+
+  // Merge all 4 dark shadowbox frame bars into 1 draw call
+  const hBar = new THREE.BoxGeometry(width + 0.16, 0.08, 0.08);
+  const vBar = new THREE.BoxGeometry(0.08, height, 0.08);
+  const outerFrameGeo = mergeTransformedParts([
+    { geo: hBar, pos: [0, (height + 0.08) / 2, 0.01] },
+    { geo: hBar, pos: [0, -(height + 0.08) / 2, 0.01] },
+    { geo: vBar, pos: [-(width + 0.08) / 2, 0, 0.01] },
+    { geo: vBar, pos: [(width + 0.08) / 2, 0, 0.01] },
+  ]);
+  hBar.dispose();
+  vBar.dispose();
+
+  // Merge all 4 inner gold reveal bars into 1 draw call
+  const ghBar = new THREE.BoxGeometry(width + 0.08, 0.04, 0.025);
+  const gvBar = new THREE.BoxGeometry(0.04, height + 0.08, 0.025);
+  const goldTrimGeo = mergeTransformedParts([
+    { geo: ghBar, pos: [0, (height + 0.04) / 2, 0.038] },
+    { geo: ghBar, pos: [0, -(height + 0.04) / 2, 0.038] },
+    { geo: gvBar, pos: [-(width + 0.04) / 2, 0, 0.038] },
+    { geo: gvBar, pos: [(width + 0.04) / 2, 0, 0.038] },
+  ]);
+  ghBar.dispose();
+  gvBar.dispose();
+
+  const backGeo = new THREE.PlaneGeometry(width + 0.08, height + 0.08);
+  const faceGeo = new THREE.PlaneGeometry(width, height);
+
+  return { frameMat, goldMat, backMat, outerFrameGeo, goldTrimGeo, backGeo, faceGeo };
+})() : null;
+
+// ==================================================================================
+// MAIN CENTRAL WALL ARTWORK — Preserved untouched ("STAY SIMPLE / STAY TRUE" etc.)
 // ==================================================================================
 interface WallArtworkProps {
-  headingLine1: string; // e.g. "STAY"
-  headingLine2: string; // e.g. "SIMPLE"
-  headingLine3: string; // e.g. "STAY" (indented)
-  headingLine4: string; // e.g. "TRUE" (indented)
+  headingLine1: string;
+  headingLine2: string;
+  headingLine3: string;
+  headingLine4: string;
   position: [number, number, number];
   rotation: [number, number, number];
-  width?: number;
-  height?: number;
+  showAccentSpotLight?: boolean;
 }
-
-// Module-level artwork texture cache to eliminate duplicate canvas renders
-const wallArtworkTextureCache = new Map<string, THREE.CanvasTexture>();
 
 const WallArtwork: React.FC<WallArtworkProps> = ({
   headingLine1,
@@ -31,69 +84,63 @@ const WallArtwork: React.FC<WallArtworkProps> = ({
   headingLine4,
   position,
   rotation,
-  width = 3.8,
-  height = 5.0,
+  showAccentSpotLight = false,
 }) => {
   const canvasTexture = useMemo(() => {
-    const cacheKey = `${headingLine1}_${headingLine2}_${headingLine3}_${headingLine4}`;
+    const caps = detectDeviceCapabilities();
+    const scale = caps.isLowEndHardware ? 0.5 : caps.isMobileViewport ? 0.65 : 0.85;
+    const cacheKey = `${headingLine1}_${headingLine2}_${headingLine3}_${headingLine4}_${scale}`;
     if (wallArtworkTextureCache.has(cacheKey)) {
       return wallArtworkTextureCache.get(cacheKey)!;
     }
 
+    const baseW = 1200;
+    const baseH = 1575;
     const canvas = document.createElement('canvas');
-    canvas.width = 1200;
-    canvas.height = 1575;
+    canvas.width = Math.round(baseW * scale);
+    canvas.height = Math.round(baseH * scale);
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
+    ctx.scale(scale, scale);
+
     // 1. Deep matte black background
     ctx.fillStyle = '#0c0c0e';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, baseW, baseH);
 
-    // 2. Batched fine vertical linen/ribbed canvas weave texture
+    // 2. Subtle linen weave (batched single fills)
     ctx.fillStyle = 'rgba(32, 33, 38, 0.45)';
-    for (let x = 0; x < canvas.width; x += 10) {
-      ctx.fillRect(x, 0, 2, canvas.height);
+    for (let x = 0; x < baseW; x += 12) {
+      ctx.fillRect(x, 0, 2, baseH);
     }
-
-    // Horizontal fine cross-weave
     ctx.fillStyle = 'rgba(22, 23, 26, 0.22)';
-    for (let y = 0; y < canvas.height; y += 16) {
-      ctx.fillRect(0, y, canvas.width, 1.5);
+    for (let y = 0; y < baseH; y += 18) {
+      ctx.fillRect(0, y, baseW, 1.5);
     }
 
     // 3. Ambient vignette
-    const vignette = ctx.createRadialGradient(
-      canvas.width * 0.5,
-      canvas.height * 0.45,
-      120,
-      canvas.width * 0.5,
-      canvas.height * 0.5,
-      820
-    );
+    const vignette = ctx.createRadialGradient(baseW * 0.5, baseH * 0.45, 120, baseW * 0.5, baseH * 0.5, 820);
     vignette.addColorStop(0, 'rgba(32, 33, 38, 0.35)');
     vignette.addColorStop(1, 'rgba(4, 4, 6, 0.88)');
     ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, baseW, baseH);
 
-    // 3.5 Sharp Golden Boundary Lines (Inner Framing on Canvas)
-    const goldBorderGrad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+    // 4. Double Gold Boundary Pinstripes
+    const goldBorderGrad = ctx.createLinearGradient(0, 0, baseW, baseH);
     goldBorderGrad.addColorStop(0.0, '#cca044');
     goldBorderGrad.addColorStop(0.25, '#fae19d');
     goldBorderGrad.addColorStop(0.5, '#e4bb5a');
     goldBorderGrad.addColorStop(0.75, '#b9872e');
     goldBorderGrad.addColorStop(1.0, '#f2d68a');
 
-    // Outer sharp gold boundary pinstripe
     ctx.strokeStyle = goldBorderGrad;
     ctx.lineWidth = 11;
-    ctx.strokeRect(27, 27, canvas.width - 54, canvas.height - 54);
+    ctx.strokeRect(27, 27, baseW - 54, baseH - 54);
 
-    // Inner fine delicate gold border line
     ctx.lineWidth = 3;
-    ctx.strokeRect(44, 44, canvas.width - 88, canvas.height - 88);
+    ctx.strokeRect(44, 44, baseW - 88, baseH - 88);
 
-    // 4. Staggered Typography Layout:
+    // 5. Staggered Metallic Gold Typography
     const baseFontSize = 122;
     const lineHeight = 146;
     const topStart = 338;
@@ -101,7 +148,6 @@ const WallArtwork: React.FC<WallArtworkProps> = ({
     const rightColX = 495;
     const safeRightEdge = 1050;
 
-    // Draw lines with metallic brushed gold gradient and auto-fit protection
     const renderGoldLine = (text: string, defaultX: number, y: number, isRightCol: boolean) => {
       let lineFontSize = baseFontSize;
       ctx.font = `700 ${lineFontSize}px "Didot", "Bodoni MT", "Playfair Display", "Times New Roman", serif`;
@@ -151,89 +197,19 @@ const WallArtwork: React.FC<WallArtworkProps> = ({
     const texture = new THREE.CanvasTexture(canvas);
     texture.generateMipmaps = true;
     texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.colorSpace = THREE.SRGBColorSpace;
     wallArtworkTextureCache.set(cacheKey, texture);
     return texture;
   }, [headingLine1, headingLine2, headingLine3, headingLine4]);
 
+  if (!wallArtStatic) return null;
+
   return (
     <group position={position} rotation={rotation}>
-      {/* 1. Outer Floating Shadowbox Frame (4 sleek perimeter bars around the canvas) */}
-      {/* Top frame bar */}
-      <mesh position={[0, (height + 0.08) / 2, 0.01]} castShadow>
-        <boxGeometry args={[width + 0.16, 0.08, 0.08]} />
-        <meshStandardMaterial color="#16171a" metalness={0.4} roughness={0.4} />
-      </mesh>
-      {/* Bottom frame bar */}
-      <mesh position={[0, -(height + 0.08) / 2, 0.01]} castShadow>
-        <boxGeometry args={[width + 0.16, 0.08, 0.08]} />
-        <meshStandardMaterial color="#16171a" metalness={0.4} roughness={0.4} />
-      </mesh>
-      {/* Left frame bar */}
-      <mesh position={[-(width + 0.08) / 2, 0, 0.01]} castShadow>
-        <boxGeometry args={[0.08, height, 0.08]} />
-        <meshStandardMaterial color="#16171a" metalness={0.4} roughness={0.4} />
-      </mesh>
-      {/* Right frame bar */}
-      <mesh position={[(width + 0.08) / 2, 0, 0.01]} castShadow>
-        <boxGeometry args={[0.08, height, 0.08]} />
-        <meshStandardMaterial color="#16171a" metalness={0.4} roughness={0.4} />
-      </mesh>
-
-      {/* 1.5 Sharp Golden Colored Boundary (Crisp lustrous bevel moulding directly framing the artwork) */}
-      {/* Top golden boundary bar */}
-      <mesh position={[0, (height + 0.04) / 2, 0.038]} castShadow>
-        <boxGeometry args={[width + 0.08, 0.04, 0.025]} />
-        <meshStandardMaterial
-          color="#d4af37"
-          metalness={0.94}
-          roughness={0.16}
-          emissive="#6e4d0d"
-          emissiveIntensity={0.3}
-        />
-      </mesh>
-      {/* Bottom golden boundary bar */}
-      <mesh position={[0, -(height + 0.04) / 2, 0.038]} castShadow>
-        <boxGeometry args={[width + 0.08, 0.04, 0.025]} />
-        <meshStandardMaterial
-          color="#d4af37"
-          metalness={0.94}
-          roughness={0.16}
-          emissive="#6e4d0d"
-          emissiveIntensity={0.3}
-        />
-      </mesh>
-      {/* Left golden boundary bar */}
-      <mesh position={[-(width + 0.04) / 2, 0, 0.038]} castShadow>
-        <boxGeometry args={[0.04, height + 0.08, 0.025]} />
-        <meshStandardMaterial
-          color="#d4af37"
-          metalness={0.94}
-          roughness={0.16}
-          emissive="#6e4d0d"
-          emissiveIntensity={0.3}
-        />
-      </mesh>
-      {/* Right golden boundary bar */}
-      <mesh position={[(width + 0.04) / 2, 0, 0.038]} castShadow>
-        <boxGeometry args={[0.04, height + 0.08, 0.025]} />
-        <meshStandardMaterial
-          color="#d4af37"
-          metalness={0.94}
-          roughness={0.16}
-          emissive="#6e4d0d"
-          emissiveIntensity={0.3}
-        />
-      </mesh>
-
-      {/* Frame Backboard (recessed behind canvas) */}
-      <mesh position={[0, 0, -0.02]}>
-        <planeGeometry args={[width + 0.08, height + 0.08]} />
-        <meshStandardMaterial color="#08080a" roughness={0.9} />
-      </mesh>
-
-      {/* 2. Textured Canvas Face (Sitting safely in front with polygonOffset to PREVENT ALL BLINKING) */}
-      <mesh position={[0, 0, 0.025]} renderOrder={10}>
-        <planeGeometry args={[width, height]} />
+      <mesh geometry={wallArtStatic.outerFrameGeo} material={wallArtStatic.frameMat} raycast={NO_RAYCAST} />
+      <mesh geometry={wallArtStatic.goldTrimGeo} material={wallArtStatic.goldMat} raycast={NO_RAYCAST} />
+      <mesh position={[0, 0, -0.02]} geometry={wallArtStatic.backGeo} material={wallArtStatic.backMat} raycast={NO_RAYCAST} />
+      <mesh position={[0, 0, 0.025]} renderOrder={10} geometry={wallArtStatic.faceGeo} raycast={NO_RAYCAST}>
         {canvasTexture && (
           <meshBasicMaterial
             map={canvasTexture}
@@ -246,631 +222,359 @@ const WallArtwork: React.FC<WallArtworkProps> = ({
           />
         )}
       </mesh>
-
-      {/* 3. Dedicated Overhead Downlight Spotlight */}
-      <spotLight
-        position={[0, height / 2 + 1.2, 1.4]}
-        target-position={[0, 0, 0]}
-        color="#fff4db"
-        intensity={2.2}
-        angle={0.58}
-        penumbra={0.65}
-        distance={7.5}
-      />
+      {showAccentSpotLight && (
+        <spotLight
+          position={[0, 3.7, 1.4]}
+          target-position={[0, 0, 0]}
+          color="#fff4db"
+          intensity={1.8}
+          angle={0.58}
+          penumbra={0.65}
+          distance={7.5}
+        />
+      )}
     </group>
   );
 };
 
 // ==================================================================================
-// CORNER GALLERY ARTWORK 1: BLACK METAL CHESS SILHOUETTES (Landscape)
-// Exact replica from the user's reference photograph (media_1795278173119_16780c08.jpg)
-// Landscape aspect ratio, floating shadowbox frame, dedicated overhead museum spotlight.
+// MINIMAL ARCHITECTURAL WALL PANELS (Replaces the 8 Removed Corner Paintings)
+// Ultra-lightweight InstancedMesh wall panelling (ONLY 3 draw calls total across 8 sites!):
+// - Understated warm ivory recessed wainscot field
+// - Thin dark walnut architectural border frame matching room columns
+// - Subtle matte champagne-gold inner geometric inlay (softer than central artwork)
+// Zero shadows, zero textures, zero spotlights, zero animations.
 // ==================================================================================
-interface CornerArtworkProps {
-  position: [number, number, number];
-  rotation: [number, number, number];
-  width?: number;
-  height?: number;
-}
+const minimalPanelAssets = typeof document !== 'undefined' ? (() => {
+  const pw = 2.6;
+  const ph = 4.4;
 
-const ChessMetalArtwork: React.FC<CornerArtworkProps> = ({
-  position,
-  rotation,
-  width = 3.4,
-  height = 2.7,
-}) => {
-  const texture = useMemo(() => {
-    if (typeof document === 'undefined') return null;
-    const loader = new THREE.TextureLoader();
-    const tex = loader.load('/artworks/chess-metal-art.jpg');
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 16;
-    return tex;
+  const panelGeo = new THREE.BoxGeometry(pw, ph, 0.025);
+  const panelMat = new THREE.MeshStandardMaterial({
+    color: '#e5dfd4',
+    roughness: 0.78,
+    metalness: 0.02,
+  });
+
+  // Thin outer walnut border frame merged into 1 geometry
+  const frameT = 0.065;
+  const frameD = 0.04;
+  const topBot = new THREE.BoxGeometry(pw + frameT * 2, frameT, frameD);
+  const sideBar = new THREE.BoxGeometry(frameT, ph, frameD);
+  const walnutGeo = mergeTransformedParts([
+    { geo: topBot, pos: [0, (ph + frameT) / 2, 0.015] },
+    { geo: topBot, pos: [0, -(ph + frameT) / 2, 0.015] },
+    { geo: sideBar, pos: [-(pw + frameT) / 2, 0, 0.015] },
+    { geo: sideBar, pos: [(pw + frameT) / 2, 0, 0.015] },
+  ]);
+  topBot.dispose();
+  sideBar.dispose();
+
+  const walnutMat = new THREE.MeshStandardMaterial({
+    color: '#2d1c13',
+    roughness: 0.45,
+    metalness: 0.05,
+  });
+
+  // Subtle matte champagne-gold inner rectangular pinstripe inset 0.28m from outer rim
+  const iw = pw - 0.56;
+  const ih = ph - 0.56;
+  const goldT = 0.024;
+  const goldD = 0.018;
+  const gTopBot = new THREE.BoxGeometry(iw + goldT * 2, goldT, goldD);
+  const gSide = new THREE.BoxGeometry(goldT, ih, goldD);
+  const goldInlayGeo = mergeTransformedParts([
+    { geo: gTopBot, pos: [0, (ih + goldT) / 2, 0.018] },
+    { geo: gTopBot, pos: [0, -(ih + goldT) / 2, 0.018] },
+    { geo: gSide, pos: [-(iw + goldT) / 2, 0, 0.018] },
+    { geo: gSide, pos: [(iw + goldT) / 2, 0, 0.018] },
+  ]);
+  gTopBot.dispose();
+  gSide.dispose();
+
+  const satinGoldMat = new THREE.MeshStandardMaterial({
+    color: '#b8944c',
+    metalness: 0.72,
+    roughness: 0.36,
+  });
+
+  return { panelGeo, panelMat, walnutGeo, walnutMat, goldInlayGeo, satinGoldMat };
+})() : null;
+
+const PANEL_TRANSFORMS: { pos: [number, number, number]; rotY: number }[] = [
+  // North wall wings (facing +Z)
+  { pos: [-11.8, 4.9, -(ROOM_HALF_SIZE - 0.04)], rotY: 0 },
+  { pos: [11.8, 4.9, -(ROOM_HALF_SIZE - 0.04)], rotY: 0 },
+  // South wall wings (facing -Z)
+  { pos: [-11.8, 4.9, ROOM_HALF_SIZE - 0.04], rotY: Math.PI },
+  { pos: [11.8, 4.9, ROOM_HALF_SIZE - 0.04], rotY: Math.PI },
+  // West wall wings (facing +X)
+  { pos: [-(ROOM_HALF_SIZE - 0.04), 4.9, -11.8], rotY: Math.PI / 2 },
+  { pos: [-(ROOM_HALF_SIZE - 0.04), 4.9, 11.8], rotY: Math.PI / 2 },
+  // East wall wings (facing -X)
+  { pos: [ROOM_HALF_SIZE - 0.04, 4.9, -11.8], rotY: -Math.PI / 2 },
+  { pos: [ROOM_HALF_SIZE - 0.04, 4.9, 11.8], rotY: -Math.PI / 2 },
+];
+
+const MinimalArchitecturalWallPanels: React.FC = () => {
+  const backingRef = useRef<THREE.InstancedMesh>(null);
+  const walnutRef = useRef<THREE.InstancedMesh>(null);
+  const goldRef = useRef<THREE.InstancedMesh>(null);
+
+  useEffect(() => {
+    const dummy = new THREE.Object3D();
+    PANEL_TRANSFORMS.forEach((cfg, idx) => {
+      dummy.position.set(cfg.pos[0], cfg.pos[1], cfg.pos[2]);
+      dummy.rotation.set(0, cfg.rotY, 0);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      backingRef.current?.setMatrixAt(idx, dummy.matrix);
+      walnutRef.current?.setMatrixAt(idx, dummy.matrix);
+      goldRef.current?.setMatrixAt(idx, dummy.matrix);
+    });
+    if (backingRef.current) backingRef.current.instanceMatrix.needsUpdate = true;
+    if (walnutRef.current) walnutRef.current.instanceMatrix.needsUpdate = true;
+    if (goldRef.current) goldRef.current.instanceMatrix.needsUpdate = true;
   }, []);
 
+  if (!minimalPanelAssets) return null;
+
   return (
-    <group position={position} rotation={rotation}>
-      {/* 1. Outer Dark Shadowbox Frame */}
-      <mesh position={[0, (height + 0.08) / 2, 0.015]} castShadow>
-        <boxGeometry args={[width + 0.16, 0.08, 0.08]} />
-        <meshStandardMaterial color="#111215" metalness={0.6} roughness={0.35} />
-      </mesh>
-      <mesh position={[0, -(height + 0.08) / 2, 0.015]} castShadow>
-        <boxGeometry args={[width + 0.16, 0.08, 0.08]} />
-        <meshStandardMaterial color="#111215" metalness={0.6} roughness={0.35} />
-      </mesh>
-      <mesh position={[-(width + 0.08) / 2, 0, 0.015]} castShadow>
-        <boxGeometry args={[0.08, height, 0.08]} />
-        <meshStandardMaterial color="#111215" metalness={0.6} roughness={0.35} />
-      </mesh>
-      <mesh position={[(width + 0.08) / 2, 0, 0.015]} castShadow>
-        <boxGeometry args={[0.08, height, 0.08]} />
-        <meshStandardMaterial color="#111215" metalness={0.6} roughness={0.35} />
-      </mesh>
-
-      {/* Frame Backboard */}
-      <mesh position={[0, 0, -0.01]}>
-        <planeGeometry args={[width + 0.08, height + 0.08]} />
-        <meshStandardMaterial color="#08080a" roughness={0.9} />
-      </mesh>
-
-      {/* 2. Artwork Canvas with zero Z-fighting */}
-      <mesh position={[0, 0, 0.025]} renderOrder={10}>
-        <planeGeometry args={[width, height]} />
-        {texture && (
-          <meshBasicMaterial
-            map={texture}
-            side={THREE.FrontSide}
-            depthTest={true}
-            depthWrite={true}
-            polygonOffset={true}
-            polygonOffsetFactor={-4}
-            polygonOffsetUnits={-4}
-          />
-        )}
-      </mesh>
-
-      {/* 3. Dedicated Overhead Warm Gallery Spotlight */}
-      <spotLight
-        position={[0, height / 2 + 1.2, 1.4]}
-        target-position={[0, 0, 0]}
-        color="#fff4db"
-        intensity={2.6}
-        angle={0.62}
-        penumbra={0.7}
-        distance={8.0}
+    <group>
+      <instancedMesh
+        ref={backingRef}
+        args={[minimalPanelAssets.panelGeo, minimalPanelAssets.panelMat, PANEL_TRANSFORMS.length]}
+        frustumCulled={false}
+        raycast={NO_RAYCAST}
+      />
+      <instancedMesh
+        ref={walnutRef}
+        args={[minimalPanelAssets.walnutGeo, minimalPanelAssets.walnutMat, PANEL_TRANSFORMS.length]}
+        frustumCulled={false}
+        raycast={NO_RAYCAST}
+      />
+      <instancedMesh
+        ref={goldRef}
+        args={[minimalPanelAssets.goldInlayGeo, minimalPanelAssets.satinGoldMat, PANEL_TRANSFORMS.length]}
+        frustumCulled={false}
+        raycast={NO_RAYCAST}
       />
     </group>
   );
 };
 
 // ==================================================================================
-// CORNER GALLERY ARTWORK 2: KING CHESS PIECE EXPRESSIONIST OIL PAINTING (Portrait)
-// Exact replica from the user's reference photograph (media_1795278201402_c044ee6b.jpg)
-// Portrait aspect ratio, black gallery frame with inner gold reveal, dedicated overhead museum spotlight.
+// MODERN REDDISH-BROWN CREDENZA (Shared geometries & materials across all 4 walls)
 // ==================================================================================
-const KingOilPaintingArtwork: React.FC<CornerArtworkProps> = ({
-  position,
-  rotation,
-  width = 2.3,
-  height = 3.18,
-}) => {
-  const texture = useMemo(() => {
-    if (typeof document === 'undefined') return null;
-    const loader = new THREE.TextureLoader();
-    const tex = loader.load('/artworks/king-oil-painting.jpg');
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 16;
-    return tex;
-  }, []);
+const credenzaStatic = typeof document !== 'undefined' ? (() => {
+  const topMat = new THREE.MeshStandardMaterial({ color: '#7a2b1c', roughness: 0.32, metalness: 0.08 });
+  const bodyMat = new THREE.MeshStandardMaterial({ color: '#632215', roughness: 0.38, metalness: 0.08 });
+  const grooveMat = new THREE.MeshStandardMaterial({ color: '#42140b', roughness: 0.7 });
+  const handleMat = new THREE.MeshStandardMaterial({ color: '#9e3a22', metalness: 0.85, roughness: 0.22 });
+  const legMat = new THREE.MeshStandardMaterial({ color: '#591c10', metalness: 0.85, roughness: 0.25 });
+  const marbleMat = new THREE.MeshStandardMaterial({ color: '#18181a', roughness: 0.2, metalness: 0.3 });
+  const goldPinMat = new THREE.MeshStandardMaterial({ color: '#d4b058', metalness: 0.92, roughness: 0.15 });
+  const goldKnotMat = new THREE.MeshStandardMaterial({ color: '#dfb858', metalness: 0.9, roughness: 0.16 });
+  const bookDarkMat = new THREE.MeshStandardMaterial({ color: '#221712', roughness: 0.55 });
+  const bookGreyMat = new THREE.MeshStandardMaterial({ color: '#363432', roughness: 0.5 });
 
-  return (
-    <group position={position} rotation={rotation}>
-      {/* 1. Outer Sleek Black Gallery Frame (Matching the photo) */}
-      <mesh position={[0, (height + 0.08) / 2, 0.015]} castShadow>
-        <boxGeometry args={[width + 0.16, 0.08, 0.08]} />
-        <meshStandardMaterial color="#121316" metalness={0.4} roughness={0.35} />
-      </mesh>
-      <mesh position={[0, -(height + 0.08) / 2, 0.015]} castShadow>
-        <boxGeometry args={[width + 0.16, 0.08, 0.08]} />
-        <meshStandardMaterial color="#121316" metalness={0.4} roughness={0.35} />
-      </mesh>
-      <mesh position={[-(width + 0.08) / 2, 0, 0.015]} castShadow>
-        <boxGeometry args={[0.08, height, 0.08]} />
-        <meshStandardMaterial color="#121316" metalness={0.4} roughness={0.35} />
-      </mesh>
-      <mesh position={[(width + 0.08) / 2, 0, 0.015]} castShadow>
-        <boxGeometry args={[0.08, height, 0.08]} />
-        <meshStandardMaterial color="#121316" metalness={0.4} roughness={0.35} />
-      </mesh>
+  // Merge all cabinet grooves & pulls
+  const groovePart = new THREE.BoxGeometry(0.01, 0.52, 0.004);
+  const groovesGeo = mergeTransformedParts([-1.18, 0, 1.18].map((gx) => ({ geo: groovePart, pos: [gx, 0.65, 0.232] })));
+  groovePart.dispose();
 
-      {/* 1.5 Inner Gold Leaf Reveal Fillet (Matching the luxury framing) */}
-      <mesh position={[0, (height + 0.02) / 2, 0.035]} castShadow>
-        <boxGeometry args={[width + 0.04, 0.02, 0.02]} />
-        <meshStandardMaterial color="#d4af37" metalness={0.9} roughness={0.2} emissive="#4a350c" emissiveIntensity={0.2} />
-      </mesh>
-      <mesh position={[0, -(height + 0.02) / 2, 0.035]} castShadow>
-        <boxGeometry args={[width + 0.04, 0.02, 0.02]} />
-        <meshStandardMaterial color="#d4af37" metalness={0.9} roughness={0.2} emissive="#4a350c" emissiveIntensity={0.2} />
-      </mesh>
-      <mesh position={[-(width + 0.02) / 2, 0, 0.035]} castShadow>
-        <boxGeometry args={[0.02, height + 0.04, 0.02]} />
-        <meshStandardMaterial color="#d4af37" metalness={0.9} roughness={0.2} emissive="#4a350c" emissiveIntensity={0.2} />
-      </mesh>
-      <mesh position={[(width + 0.02) / 2, 0, 0.035]} castShadow>
-        <boxGeometry args={[0.02, height + 0.04, 0.02]} />
-        <meshStandardMaterial color="#d4af37" metalness={0.9} roughness={0.2} emissive="#4a350c" emissiveIntensity={0.2} />
-      </mesh>
+  const handlePart = new THREE.BoxGeometry(0.016, 0.16, 0.006);
+  const handlesGeo = mergeTransformedParts([-1.18, 0, 1.18].map((gx) => ({ geo: handlePart, pos: [gx, 0.77, 0.235] })));
+  handlePart.dispose();
 
-      {/* Frame Backboard */}
-      <mesh position={[0, 0, -0.01]}>
-        <planeGeometry args={[width + 0.08, height + 0.08]} />
-        <meshStandardMaterial color="#08080a" roughness={0.9} />
-      </mesh>
+  // Merge all blade legs into 1 geometry
+  const postPart = new THREE.BoxGeometry(0.035, 0.72, 0.035);
+  const runnerPart = new THREE.BoxGeometry(0.035, 0.035, 0.52);
+  const legsGeo = mergeTransformedParts([
+    { geo: postPart, pos: [-1.55, 0.38, 0.2] },
+    { geo: postPart, pos: [-1.55, 0.38, -0.2] },
+    { geo: runnerPart, pos: [-1.55, 0.03, 0] },
+    { geo: postPart, pos: [1.55, 0.38, 0.2] },
+    { geo: postPart, pos: [1.55, 0.38, -0.2] },
+    { geo: runnerPart, pos: [1.55, 0.03, 0] },
+  ]);
+  postPart.dispose();
+  runnerPart.dispose();
 
-      {/* 2. Vibrant King Oil Painting Canvas with zero Z-fighting */}
-      <mesh position={[0, 0, 0.025]} renderOrder={10}>
-        <planeGeometry args={[width, height]} />
-        {texture && (
-          <meshBasicMaterial
-            map={texture}
-            side={THREE.FrontSide}
-            depthTest={true}
-            depthWrite={true}
-            polygonOffset={true}
-            polygonOffsetFactor={-4}
-            polygonOffsetUnits={-4}
-          />
-        )}
-      </mesh>
+  const topGeo = new THREE.BoxGeometry(4.8, 0.035, 0.5);
+  const bodyGeo = new THREE.BoxGeometry(4.74, 0.54, 0.46);
+  const pedestalGeo = new THREE.CylinderGeometry(0.13, 0.15, 0.12, 20);
+  const pinGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.06, 12);
+  // Optimized TorusKnot segments (48x16 instead of 128x32 -> 80% fewer triangles, visually crisp)
+  const ribbonKnotGeo = new THREE.TorusKnotGeometry(0.16, 0.032, 48, 16, 2, 3);
+  const book1Geo = new THREE.BoxGeometry(0.46, 0.055, 0.32);
+  const bookTrimGeo = new THREE.BoxGeometry(0.02, 0.05, 0.3);
+  const book2Geo = new THREE.BoxGeometry(0.42, 0.048, 0.29);
 
-      {/* 3. Dedicated Overhead Warm Gallery Spotlight */}
-      <spotLight
-        position={[0, height / 2 + 1.2, 1.4]}
-        target-position={[0, 0, 0]}
-        color="#fff4db"
-        intensity={2.6}
-        angle={0.58}
-        penumbra={0.65}
-        distance={8.0}
-      />
-    </group>
-  );
-};
+  return {
+    topMat, bodyMat, grooveMat, handleMat, legMat, marbleMat, goldPinMat, goldKnotMat, bookDarkMat, bookGreyMat,
+    groovesGeo, handlesGeo, legsGeo, topGeo, bodyGeo, pedestalGeo, pinGeo, ribbonKnotGeo, book1Geo, bookTrimGeo, book2Geo,
+  };
+})() : null;
 
-// ==================================================================================
-// CORNER GALLERY ARTWORK 3: CHESS PIECES WATERCOLOR & SPLATTER ART (Square Canvas)
-// Exact replica from the user's reference photograph (media_1795278841293_3dc7f7c4.jpg)
-// Square 1:1 aspect ratio, floating modern gallery frame, dedicated museum spotlight.
-// ==================================================================================
-const ChessSplatterArtwork: React.FC<CornerArtworkProps> = ({
-  position,
-  rotation,
-  width = 2.8,
-  height = 2.8,
-}) => {
-  const texture = useMemo(() => {
-    if (typeof document === 'undefined') return null;
-    const loader = new THREE.TextureLoader();
-    const tex = loader.load('/artworks/chess-splatter-art.jpg');
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 16;
-    return tex;
-  }, []);
-
-  return (
-    <group position={position} rotation={rotation}>
-      {/* 1. Outer Sleek Floating Gallery Frame */}
-      <mesh position={[0, (height + 0.08) / 2, 0.015]} castShadow>
-        <boxGeometry args={[width + 0.16, 0.08, 0.08]} />
-        <meshStandardMaterial color="#141518" metalness={0.5} roughness={0.35} />
-      </mesh>
-      <mesh position={[0, -(height + 0.08) / 2, 0.015]} castShadow>
-        <boxGeometry args={[width + 0.16, 0.08, 0.08]} />
-        <meshStandardMaterial color="#141518" metalness={0.5} roughness={0.35} />
-      </mesh>
-      <mesh position={[-(width + 0.08) / 2, 0, 0.015]} castShadow>
-        <boxGeometry args={[0.08, height, 0.08]} />
-        <meshStandardMaterial color="#141518" metalness={0.5} roughness={0.35} />
-      </mesh>
-      <mesh position={[(width + 0.08) / 2, 0, 0.015]} castShadow>
-        <boxGeometry args={[0.08, height, 0.08]} />
-        <meshStandardMaterial color="#141518" metalness={0.5} roughness={0.35} />
-      </mesh>
-
-      {/* Frame Backboard */}
-      <mesh position={[0, 0, -0.01]}>
-        <planeGeometry args={[width + 0.08, height + 0.08]} />
-        <meshStandardMaterial color="#08080a" roughness={0.9} />
-      </mesh>
-
-      {/* 2. Splatter Canvas Face with zero Z-fighting */}
-      <mesh position={[0, 0, 0.025]} renderOrder={10}>
-        <planeGeometry args={[width, height]} />
-        {texture && (
-          <meshBasicMaterial
-            map={texture}
-            side={THREE.FrontSide}
-            depthTest={true}
-            depthWrite={true}
-            polygonOffset={true}
-            polygonOffsetFactor={-4}
-            polygonOffsetUnits={-4}
-          />
-        )}
-      </mesh>
-
-      {/* 3. Dedicated Overhead Warm Gallery Spotlight */}
-      <spotLight
-        position={[0, height / 2 + 1.2, 1.4]}
-        target-position={[0, 0, 0]}
-        color="#fff4db"
-        intensity={2.6}
-        angle={0.62}
-        penumbra={0.7}
-        distance={8.0}
-      />
-    </group>
-  );
-};
-
-// ==================================================================================
-// CORNER GALLERY ARTWORK 4: TWO KINGS FINE ART OIL PAINTING (Portrait)
-// Exact replica from the user's reference photograph (media_1795278854268_02660110.jpg)
-// Portrait aspect ratio, black gallery frame with inner gold reveal, dedicated museum spotlight.
-// ==================================================================================
-const TwoKingsArtwork: React.FC<CornerArtworkProps> = ({
-  position,
-  rotation,
-  width = 2.45,
-  height = 3.0,
-}) => {
-  const texture = useMemo(() => {
-    if (typeof document === 'undefined') return null;
-    const loader = new THREE.TextureLoader();
-    const tex = loader.load('/artworks/two-kings-art.jpg');
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 16;
-    return tex;
-  }, []);
-
-  return (
-    <group position={position} rotation={rotation}>
-      {/* 1. Outer Sleek Black Gallery Frame */}
-      <mesh position={[0, (height + 0.08) / 2, 0.015]} castShadow>
-        <boxGeometry args={[width + 0.16, 0.08, 0.08]} />
-        <meshStandardMaterial color="#121316" metalness={0.4} roughness={0.35} />
-      </mesh>
-      <mesh position={[0, -(height + 0.08) / 2, 0.015]} castShadow>
-        <boxGeometry args={[width + 0.16, 0.08, 0.08]} />
-        <meshStandardMaterial color="#121316" metalness={0.4} roughness={0.35} />
-      </mesh>
-      <mesh position={[-(width + 0.08) / 2, 0, 0.015]} castShadow>
-        <boxGeometry args={[0.08, height, 0.08]} />
-        <meshStandardMaterial color="#121316" metalness={0.4} roughness={0.35} />
-      </mesh>
-      <mesh position={[(width + 0.08) / 2, 0, 0.015]} castShadow>
-        <boxGeometry args={[0.08, height, 0.08]} />
-        <meshStandardMaterial color="#121316" metalness={0.4} roughness={0.35} />
-      </mesh>
-
-      {/* 1.5 Inner Gold Leaf Reveal Fillet */}
-      <mesh position={[0, (height + 0.02) / 2, 0.035]} castShadow>
-        <boxGeometry args={[width + 0.04, 0.02, 0.02]} />
-        <meshStandardMaterial color="#d4af37" metalness={0.9} roughness={0.2} emissive="#4a350c" emissiveIntensity={0.2} />
-      </mesh>
-      <mesh position={[0, -(height + 0.02) / 2, 0.035]} castShadow>
-        <boxGeometry args={[width + 0.04, 0.02, 0.02]} />
-        <meshStandardMaterial color="#d4af37" metalness={0.9} roughness={0.2} emissive="#4a350c" emissiveIntensity={0.2} />
-      </mesh>
-      <mesh position={[-(width + 0.02) / 2, 0, 0.035]} castShadow>
-        <boxGeometry args={[0.02, height + 0.04, 0.02]} />
-        <meshStandardMaterial color="#d4af37" metalness={0.9} roughness={0.2} emissive="#4a350c" emissiveIntensity={0.2} />
-      </mesh>
-      <mesh position={[(width + 0.02) / 2, 0, 0.035]} castShadow>
-        <boxGeometry args={[0.02, height + 0.04, 0.02]} />
-        <meshStandardMaterial color="#d4af37" metalness={0.9} roughness={0.2} emissive="#4a350c" emissiveIntensity={0.2} />
-      </mesh>
-
-      {/* Frame Backboard */}
-      <mesh position={[0, 0, -0.01]}>
-        <planeGeometry args={[width + 0.08, height + 0.08]} />
-        <meshStandardMaterial color="#08080a" roughness={0.9} />
-      </mesh>
-
-      {/* 2. Artwork Canvas with zero Z-fighting */}
-      <mesh position={[0, 0, 0.025]} renderOrder={10}>
-        <planeGeometry args={[width, height]} />
-        {texture && (
-          <meshBasicMaterial
-            map={texture}
-            side={THREE.FrontSide}
-            depthTest={true}
-            depthWrite={true}
-            polygonOffset={true}
-            polygonOffsetFactor={-4}
-            polygonOffsetUnits={-4}
-          />
-        )}
-      </mesh>
-
-      {/* 3. Dedicated Overhead Warm Gallery Spotlight */}
-      <spotLight
-        position={[0, height / 2 + 1.2, 1.4]}
-        target-position={[0, 0, 0]}
-        color="#fff4db"
-        intensity={2.6}
-        angle={0.58}
-        penumbra={0.65}
-        distance={8.0}
-      />
-    </group>
-  );
-};
-
-// ==================================================================================
-// MODERN REDDISH-BROWN CREDENZA (Detailed, Sleek, Non-Chunky)
-// Completely rich reddish-brown tone: top slab, cabinet body, door panels, and blade legs
-// ==================================================================================
 interface CredenzaProps {
   position: [number, number, number];
   rotation?: [number, number, number];
 }
 
 const Credenza: React.FC<CredenzaProps> = ({ position, rotation = [0, 0, 0] }) => {
+  if (!credenzaStatic) return null;
   return (
     <group position={position} rotation={rotation}>
-      {/* Slim Floating Top Slab in Rich Reddish-Brown Mahogany with subtle overhang */}
-      <mesh position={[0, 0.94, 0]} castShadow receiveShadow>
-        <boxGeometry args={[4.8, 0.035, 0.5]} />
-        <meshStandardMaterial color="#7a2b1c" roughness={0.32} metalness={0.08} />
-      </mesh>
+      <mesh position={[0, 0.94, 0]} geometry={credenzaStatic.topGeo} material={credenzaStatic.topMat} raycast={NO_RAYCAST} />
+      <mesh position={[0, 0.65, 0]} geometry={credenzaStatic.bodyGeo} material={credenzaStatic.bodyMat} raycast={NO_RAYCAST} />
+      <mesh geometry={credenzaStatic.groovesGeo} material={credenzaStatic.grooveMat} raycast={NO_RAYCAST} />
+      <mesh geometry={credenzaStatic.handlesGeo} material={credenzaStatic.handleMat} raycast={NO_RAYCAST} />
+      <mesh geometry={credenzaStatic.legsGeo} material={credenzaStatic.legMat} raycast={NO_RAYCAST} />
 
-      {/* Main Cabinet Body — Completely Reddish-Brown */}
-      <mesh position={[0, 0.65, 0]} castShadow receiveShadow>
-        <boxGeometry args={[4.74, 0.54, 0.46]} />
-        <meshStandardMaterial color="#632215" roughness={0.38} metalness={0.08} />
-      </mesh>
-
-      {/* 4 Cabinet Door Groove Division Lines & Inset Accents */}
-      {[-1.18, 0, 1.18].map((gx, idx) => (
-        <group key={idx} position={[gx, 0.65, 0.232]}>
-          <mesh>
-            <boxGeometry args={[0.01, 0.52, 0.004]} />
-            <meshStandardMaterial color="#42140b" roughness={0.7} />
-          </mesh>
-          {/* Subtle vertical reddish-gold metallic finger pull accent */}
-          <mesh position={[0, 0.12, 0.003]}>
-            <boxGeometry args={[0.016, 0.16, 0.006]} />
-            <meshStandardMaterial color="#9e3a22" metalness={0.85} roughness={0.22} />
-          </mesh>
-        </group>
-      ))}
-
-      {/* Sleek Blade Legs in Polished Reddish-Brown Lacquer / Bronze (Slender, Architectural) */}
-      {/* Left Blade Unit */}
-      <group position={[-1.55, 0.22, 0]}>
-        {/* Front post */}
-        <mesh position={[0, 0.16, 0.2]} castShadow>
-          <boxGeometry args={[0.035, 0.72, 0.035]} />
-          <meshStandardMaterial color="#591c10" metalness={0.85} roughness={0.25} />
-        </mesh>
-        {/* Rear post */}
-        <mesh position={[0, 0.16, -0.2]} castShadow>
-          <boxGeometry args={[0.035, 0.72, 0.035]} />
-          <meshStandardMaterial color="#591c10" metalness={0.85} roughness={0.25} />
-        </mesh>
-        {/* Floor runner bar */}
-        <mesh position={[0, -0.19, 0]}>
-          <boxGeometry args={[0.035, 0.035, 0.52]} />
-          <meshStandardMaterial color="#591c10" metalness={0.85} roughness={0.25} />
-        </mesh>
-      </group>
-
-      {/* Right Blade Unit */}
-      <group position={[1.55, 0.22, 0]}>
-        {/* Front post */}
-        <mesh position={[0, 0.16, 0.2]} castShadow>
-          <boxGeometry args={[0.035, 0.72, 0.035]} />
-          <meshStandardMaterial color="#591c10" metalness={0.85} roughness={0.25} />
-        </mesh>
-        {/* Rear post */}
-        <mesh position={[0, 0.16, -0.2]} castShadow>
-          <boxGeometry args={[0.035, 0.72, 0.035]} />
-          <meshStandardMaterial color="#591c10" metalness={0.85} roughness={0.25} />
-        </mesh>
-        {/* Floor runner bar */}
-        <mesh position={[0, -0.19, 0]}>
-          <boxGeometry args={[0.035, 0.035, 0.52]} />
-          <meshStandardMaterial color="#591c10" metalness={0.85} roughness={0.25} />
-        </mesh>
-      </group>
-
-      {/* Detailed Accessories on Top of Credenza */}
-      {/* 1. Abstract Gold Ribbon Loop Sculpture on Dark Marble Pedestal (Left side) */}
+      {/* 1. Gold Ribbon Sculpture on Dark Marble Pedestal */}
       <group position={[-1.5, 0.96, 0.02]}>
-        {/* Black marble pedestal */}
-        <mesh position={[0, 0.06, 0]} castShadow>
-          <cylinderGeometry args={[0.13, 0.15, 0.12, 32]} />
-          <meshStandardMaterial color="#18181a" roughness={0.2} metalness={0.3} />
-        </mesh>
-        {/* Slender golden connecting pin */}
-        <mesh position={[0, 0.15, 0]}>
-          <cylinderGeometry args={[0.015, 0.015, 0.06, 16]} />
-          <meshStandardMaterial color="#d4b058" metalness={0.92} roughness={0.15} />
-        </mesh>
-        {/* Polished 24K Gold Ribbon Loop */}
-        <mesh position={[0, 0.38, 0]} rotation={[0.4, 0.6, 0.2]} castShadow>
-          <torusKnotGeometry args={[0.16, 0.032, 128, 32, 2, 3]} />
-          <meshPhysicalMaterial
-            color="#dfb858"
-            metalness={0.94}
-            roughness={0.12}
-            clearcoat={0.9}
-            clearcoatRoughness={0.1}
-          />
-        </mesh>
+        <mesh position={[0, 0.06, 0]} geometry={credenzaStatic.pedestalGeo} material={credenzaStatic.marbleMat} raycast={NO_RAYCAST} />
+        <mesh position={[0, 0.15, 0]} geometry={credenzaStatic.pinGeo} material={credenzaStatic.goldPinMat} raycast={NO_RAYCAST} />
+        <mesh position={[0, 0.38, 0]} rotation={[0.4, 0.6, 0.2]} geometry={credenzaStatic.ribbonKnotGeo} material={credenzaStatic.goldKnotMat} raycast={NO_RAYCAST} />
       </group>
 
-      {/* 2. Stack of Vintage Hardcover Architectural Books (Right side) */}
+      {/* 2. Stack of Vintage Architectural Books */}
       <group position={[1.4, 0.96, 0.02]}>
-        {/* Bottom book (Dark Espresso with gold page edges) */}
-        <mesh position={[0, 0.03, 0]} rotation={[0, 0.08, 0]} castShadow>
-          <boxGeometry args={[0.46, 0.055, 0.32]} />
-          <meshStandardMaterial color="#221712" roughness={0.55} />
-        </mesh>
-        {/* Gold page trim */}
-        <mesh position={[0.22, 0.03, 0]} rotation={[0, 0.08, 0]}>
-          <boxGeometry args={[0.02, 0.05, 0.3]} />
-          <meshStandardMaterial color="#c6a45c" metalness={0.85} roughness={0.25} />
-        </mesh>
-        {/* Top book (Charcoal / Gold foil spine) */}
-        <mesh position={[0.02, 0.085, 0.01]} rotation={[0, -0.05, 0]} castShadow>
-          <boxGeometry args={[0.42, 0.048, 0.29]} />
-          <meshStandardMaterial color="#363432" roughness={0.5} />
-        </mesh>
+        <mesh position={[0, 0.03, 0]} rotation={[0, 0.08, 0]} geometry={credenzaStatic.book1Geo} material={credenzaStatic.bookDarkMat} raycast={NO_RAYCAST} />
+        <mesh position={[0.22, 0.03, 0]} rotation={[0, 0.08, 0]} geometry={credenzaStatic.bookTrimGeo} material={credenzaStatic.goldPinMat} raycast={NO_RAYCAST} />
+        <mesh position={[0.02, 0.085, 0.01]} rotation={[0, -0.05, 0]} geometry={credenzaStatic.book2Geo} material={credenzaStatic.bookGreyMat} raycast={NO_RAYCAST} />
       </group>
     </group>
   );
 };
 
 // ==================================================================================
-// SLENDER DESIGNER BRASS FLOOR LAMP (Refined, Non-Chunky)
+// SLENDER DESIGNER BRASS FLOOR LAMP (Merged static parts + warm glowing interior bulb)
 // ==================================================================================
+const floorLampStatic = typeof document !== 'undefined' ? (() => {
+  const brassMat = new THREE.MeshStandardMaterial({ color: '#c6a45c', metalness: 0.88, roughness: 0.2 });
+  const shadeGlowMat = new THREE.MeshBasicMaterial({ color: '#fff3d4' });
+
+  const baseG = new THREE.CylinderGeometry(0.28, 0.3, 0.05, 22);
+  const stemG = new THREE.CylinderGeometry(0.016, 0.016, 2.7, 12);
+  const jointG = new THREE.SphereGeometry(0.028, 12, 10);
+  const armG = new THREE.CylinderGeometry(0.014, 0.014, 0.52, 12);
+  const shadeG = new THREE.CylinderGeometry(0.14, 0.24, 0.32, 22);
+
+  const mergedLampGeo = mergeTransformedParts([
+    { geo: baseG, pos: [0, 0.025, 0] },
+    { geo: stemG, pos: [0, 1.4, 0] },
+    { geo: jointG, pos: [0, 2.75, 0] },
+    { geo: armG, pos: [0.26, 2.75, 0], rot: [0, 0, Math.PI / 2] },
+    { geo: shadeG, pos: [0.52, 2.6, 0] },
+  ]);
+  baseG.dispose();
+  stemG.dispose();
+  jointG.dispose();
+  armG.dispose();
+  shadeG.dispose();
+
+  const bulbDiscGeo = new THREE.CircleGeometry(0.21, 16);
+
+  return { brassMat, shadeGlowMat, mergedLampGeo, bulbDiscGeo };
+})() : null;
+
 interface FloorLampProps {
   position: [number, number, number];
   rotation?: [number, number, number];
+  showLight?: boolean;
 }
 
-const FloorLamp: React.FC<FloorLampProps> = ({ position, rotation = [0, 0, 0] }) => {
+const FloorLamp: React.FC<FloorLampProps> = ({ position, rotation = [0, 0, 0], showLight = false }) => {
+  if (!floorLampStatic) return null;
   return (
     <group position={position} rotation={rotation}>
-      {/* Weighted Brass Disc Base */}
-      <mesh position={[0, 0.025, 0]} castShadow>
-        <cylinderGeometry args={[0.28, 0.3, 0.05, 36]} />
-        <meshStandardMaterial color="#c6a45c" metalness={0.88} roughness={0.2} />
-      </mesh>
-
-      {/* Slender Vertical Stem */}
-      <mesh position={[0, 1.4, 0]} castShadow>
-        <cylinderGeometry args={[0.016, 0.016, 2.7, 20]} />
-        <meshStandardMaterial color="#c6a45c" metalness={0.88} roughness={0.2} />
-      </mesh>
-
-      {/* Elbow Arm Joint */}
-      <mesh position={[0, 2.75, 0]}>
-        <sphereGeometry args={[0.028, 16, 16]} />
-        <meshStandardMaterial color="#c6a45c" metalness={0.88} roughness={0.2} />
-      </mesh>
-
-      {/* Horizontal Curved Arm Extender */}
-      <mesh position={[0.26, 2.75, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.014, 0.014, 0.52, 16]} />
-        <meshStandardMaterial color="#c6a45c" metalness={0.88} roughness={0.2} />
-      </mesh>
-
-      {/* Conical Brushed Brass Lamp Shade */}
-      <mesh position={[0.52, 2.6, 0]} castShadow>
-        <cylinderGeometry args={[0.14, 0.24, 0.32, 32]} />
-        <meshStandardMaterial color="#c6a45c" metalness={0.88} roughness={0.25} />
-      </mesh>
-
-      {/* Warm Ambient Downward Light */}
-      <pointLight position={[0.52, 2.44, 0]} color="#ffe8b8" intensity={1.5} distance={6.0} />
-      <spotLight
-        position={[0.52, 2.58, 0]}
-        target-position={[0.52, 0, 0]}
-        color="#fff0cc"
-        intensity={2.2}
-        angle={0.65}
-        penumbra={0.7}
-        distance={6.5}
-      />
+      <mesh geometry={floorLampStatic.mergedLampGeo} material={floorLampStatic.brassMat} raycast={NO_RAYCAST} />
+      <mesh position={[0.52, 2.442, 0]} rotation={[Math.PI / 2, 0, 0]} geometry={floorLampStatic.bulbDiscGeo} material={floorLampStatic.shadeGlowMat} raycast={NO_RAYCAST} />
+      {showLight && (
+        <pointLight position={[0.52, 2.35, 0]} color="#ffe8b8" intensity={1.8} distance={7.0} decay={1.8} />
+      )}
     </group>
   );
 };
 
 // ==================================================================================
-// LUXURY ARTISTIC DESIGNER RUG (Warm gold, charcoal marble and rich crimson hues)
+// LUXURY ARTISTIC DESIGNER RUG (Scaled cleanly for mobile/desktop VRAM budget)
 // ==================================================================================
-const RoyalDesignerRug: React.FC = () => {
+const RoyalDesignerRug: React.FC<{ receiveShadow: boolean }> = ({ receiveShadow }) => {
   const carpetTexture = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const caps = detectDeviceCapabilities();
+    const res = caps.isLowEndHardware ? 512 : caps.isMobileViewport ? 768 : 1024;
+    const scale = res / 2048;
+
     const canvas = document.createElement('canvas');
-    canvas.width = 2048;
-    canvas.height = 2048;
+    canvas.width = res;
+    canvas.height = res;
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
-    // 1. Base Warm Ivory Cream
+    ctx.scale(scale, scale);
+
     ctx.fillStyle = '#f0ece3';
     ctx.fillRect(0, 0, 2048, 2048);
 
-    // 2. Micro woven textile cross-stitch texture (optimized batched rasterization)
     ctx.fillStyle = 'rgba(180, 170, 155, 0.16)';
-    for (let i = 0; i < 2048; i += 16) {
+    for (let i = 0; i < 2048; i += 24) {
       ctx.fillRect(i, 0, 3, 2048);
       ctx.fillRect(0, i, 2048, 3);
     }
 
-    // 3. Woven fringe tassels on ends
     const drawFringes = (yStart: number) => {
       ctx.fillStyle = '#f7f4ed';
-      for (let x = 60; x < 1988; x += 10) {
+      for (let x = 60; x < 1988; x += 14) {
         ctx.fillRect(x, yStart, 4, 30);
       }
     };
     drawFringes(10);
     drawFringes(2008);
 
-    // 4. Outer Dark Espresso Border
     ctx.strokeStyle = '#281a14';
     ctx.lineWidth = 34;
     ctx.strokeRect(55, 55, 1938, 1938);
 
-    // 5. Outer Gold Beaded Trim
     ctx.strokeStyle = '#c6a45c';
     ctx.lineWidth = 8;
     ctx.strokeRect(80, 80, 1888, 1888);
 
-    // 6. Secondary Warm Cognac Brown Border
     ctx.fillStyle = '#4a2216';
     ctx.fillRect(90, 90, 1868, 110);
     ctx.fillRect(90, 1848, 1868, 110);
     ctx.fillRect(90, 90, 110, 1868);
     ctx.fillRect(1848, 90, 110, 1868);
 
-    // Repeating Gold Floral Trefoils in Cognac band
     ctx.strokeStyle = '#d4aa50';
     ctx.lineWidth = 3.5;
-    for (let x = 120; x < 1920; x += 44) {
+    for (let x = 120; x < 1920; x += 48) {
       ctx.strokeRect(x, 118, 24, 52);
       ctx.strokeRect(x, 1876, 24, 52);
     }
-    for (let y = 120; y < 1920; y += 44) {
+    for (let y = 120; y < 1920; y += 48) {
       ctx.strokeRect(118, y, 52, 24);
       ctx.strokeRect(1876, y, 52, 24);
     }
 
-    // 7. Middle Gold Stripe
     ctx.strokeStyle = '#c6a45c';
     ctx.lineWidth = 7;
     ctx.strokeRect(205, 205, 1638, 1638);
 
-    // 8. Main Grand Crimson Red Arabesque Border
     ctx.fillStyle = '#7a1a1a';
     ctx.fillRect(212, 212, 1624, 130);
     ctx.fillRect(212, 1706, 1624, 130);
     ctx.fillRect(212, 212, 130, 1624);
     ctx.fillRect(1706, 212, 130, 1624);
 
-    // Repeating Gold Palmettes
     const drawPalmette = (cx: number, cy: number, rot: number) => {
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(rot);
       ctx.fillStyle = '#4a2216';
-      ctx.strokeStyle = '#d8b056';
-      ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(0, -36);
       ctx.lineTo(24, 0);
@@ -885,28 +589,25 @@ const RoyalDesignerRug: React.FC = () => {
       ctx.restore();
     };
 
-    for (let x = 270; x < 1780; x += 78) {
+    for (let x = 270; x < 1780; x += 82) {
       drawPalmette(x, 277, 0);
       drawPalmette(x, 1771, 0);
     }
-    for (let y = 270; y < 1780; y += 78) {
+    for (let y = 270; y < 1780; y += 82) {
       drawPalmette(277, y, Math.PI / 2);
       drawPalmette(1771, y, Math.PI / 2);
     }
 
-    // 9. Inner Gold Border Line
     ctx.strokeStyle = '#c6a45c';
     ctx.lineWidth = 8;
     ctx.strokeRect(348, 348, 1352, 1352);
 
-    // 10. Central Field: Rich Crimson Wine Red
     ctx.fillStyle = '#821a1a';
     ctx.fillRect(356, 356, 1336, 1336);
 
-    // Gold diamond filigree lattice on field
     ctx.strokeStyle = 'rgba(212, 170, 80, 0.22)';
     ctx.lineWidth = 1.5;
-    for (let d = -1336; d < 2672; d += 84) {
+    for (let d = -1336; d < 2672; d += 96) {
       ctx.beginPath();
       ctx.moveTo(356 + d, 356);
       ctx.lineTo(356 + d + 1336, 1692);
@@ -918,7 +619,6 @@ const RoyalDesignerRug: React.FC = () => {
       ctx.stroke();
     }
 
-    // 11. Four Corner Spandrels
     const drawSpandrel = (cx: number, cy: number, rot: number) => {
       ctx.save();
       ctx.translate(cx, cy);
@@ -939,7 +639,6 @@ const RoyalDesignerRug: React.FC = () => {
     drawSpandrel(1692, 1692, Math.PI);
     drawSpandrel(356, 1692, -Math.PI / 2);
 
-    // 12. Central Royal Medallion (24-point Star with Rosette)
     const centerX = 1024;
     const centerY = 1024;
 
@@ -960,7 +659,6 @@ const RoyalDesignerRug: React.FC = () => {
     ctx.fill();
     ctx.stroke();
 
-    // Central Rosette Core
     ctx.fillStyle = '#6b1414';
     ctx.strokeStyle = '#e2be68';
     ctx.lineWidth = 5;
@@ -969,7 +667,6 @@ const RoyalDesignerRug: React.FC = () => {
     ctx.fill();
     ctx.stroke();
 
-    // Center Gold Pearl
     ctx.fillStyle = '#c6a45c';
     ctx.beginPath();
     ctx.arc(centerX, centerY, 34, 0, Math.PI * 2);
@@ -978,11 +675,18 @@ const RoyalDesignerRug: React.FC = () => {
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.ClampToEdgeWrapping;
     texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.colorSpace = THREE.SRGBColorSpace;
     return texture;
   }, []);
 
+  useEffect(() => {
+    return () => {
+      carpetTexture?.dispose();
+    };
+  }, [carpetTexture]);
+
   return (
-    <mesh position={[0, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow raycast={() => null}>
+    <mesh position={[0, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow={receiveShadow} raycast={NO_RAYCAST}>
       <planeGeometry args={[14.8, 14.8]} />
       <meshStandardMaterial map={carpetTexture || undefined} roughness={0.82} metalness={0.06} />
     </mesh>
@@ -990,167 +694,115 @@ const RoyalDesignerRug: React.FC = () => {
 };
 
 // ==================================================================================
-// ARCHITECTURAL GEOMETRIC SQUARE CHANDELIER (Matching User Reference Photo 1)
-// Two-tiered cascading hollow square frames in matte black anodized metal
-// with continuous integrated warm-white glowing LED diffuser strips.
-// Positioned above the board with wide hollow interior so it NEVER acts as a barrier.
-// Performance optimized: Zero shader recompile, snappy smooth 60 FPS transitions.
+// CORNER GOLD RING CHANDELIER (Preserved in all 4 corners, optimized shared geo & idle zero-cost loop)
 // ==================================================================================
-interface HollowSquareProps {
-  size: number;
-  barWidth: number;
-  barHeight: number;
-  diffuserHeight: number;
-  metalMat: THREE.Material;
-  diffuserMat: THREE.Material;
+const cornerChandelierStatic = typeof document !== 'undefined' ? (() => {
+  const canopyGeo = new THREE.CylinderGeometry(0.38, 0.4, 0.08, 24);
+  const ring1Geo = new THREE.TorusGeometry(1.3, 0.042, 14, 48);
+  const led1Geo = new THREE.TorusGeometry(1.3, 0.026, 10, 48);
+  const ring2Geo = new THREE.TorusGeometry(0.92, 0.038, 14, 48);
+  const led2Geo = new THREE.TorusGeometry(0.92, 0.024, 10, 48);
+  const ring3Geo = new THREE.TorusGeometry(0.62, 0.034, 14, 48);
+  const led3Geo = new THREE.TorusGeometry(0.62, 0.022, 10, 48);
+  const hitSphereGeo = new THREE.SphereGeometry(1.7, 10, 10);
+  const cableMat = new THREE.MeshStandardMaterial({ color: '#c5c7cb', metalness: 0.9, roughness: 0.2 });
+
+  // Rings sit at y = 8.4 / 7.95 / 7.5; canopy mounts cleanly on ceiling y = ROOM_HEIGHT - 0.04 (14.56)
+  const topLen = ROOM_HEIGHT - 0.08 - 8.4; // 6.12m suspension cables
+  const topMid = 8.4 + topLen / 2;
+  const topCable = new THREE.CylinderGeometry(0.004, 0.004, topLen, 6);
+  const midCable = new THREE.CylinderGeometry(0.004, 0.004, 0.45, 6);
+
+  const cablesGeo = mergeTransformedParts([
+    { geo: topCable, pos: [-0.55, topMid, -0.35] },
+    { geo: topCable, pos: [-0.55, topMid, 0.35] },
+    { geo: topCable, pos: [0.55, topMid, -0.35] },
+    { geo: topCable, pos: [0.55, topMid, 0.35] },
+    { geo: midCable, pos: [-0.45, 8.175, -0.2] },
+    { geo: midCable, pos: [-0.45, 8.175, 0.2] },
+    { geo: midCable, pos: [0.45, 8.175, -0.2] },
+    { geo: midCable, pos: [0.45, 8.175, 0.2] },
+  ]);
+  topCable.dispose();
+  midCable.dispose();
+
+  return { canopyGeo, ring1Geo, led1Geo, ring2Geo, led2Geo, ring3Geo, led3Geo, hitSphereGeo, cableMat, cablesGeo };
+})() : null;
+
+interface CornerGoldRingChandelierProps {
+  position: [number, number, number];
+  showLight: boolean;
 }
 
-const HollowSquare: React.FC<HollowSquareProps> = ({
-  size,
-  barWidth,
-  barHeight,
-  diffuserHeight,
-  metalMat,
-  diffuserMat,
-}) => {
-  const halfSpan = (size - barWidth) / 2;
-  const sideLength = size - 2 * barWidth;
-
-  return (
-    <group>
-      {/* 1. Front Bar (+Z) */}
-      <group position={[0, 0, halfSpan]}>
-        <mesh material={metalMat} position={[0, 0, 0]} castShadow>
-          <boxGeometry args={[size, barHeight, barWidth]} />
-        </mesh>
-        <mesh material={diffuserMat} position={[0, -barHeight / 2 - diffuserHeight / 2, 0]}>
-          <boxGeometry args={[size, diffuserHeight, barWidth]} />
-        </mesh>
-        <mesh material={diffuserMat} position={[0, -barHeight / 4, -barWidth / 2 - 0.005]}>
-          <boxGeometry args={[size - 2 * barWidth, barHeight / 2, 0.012]} />
-        </mesh>
-      </group>
-
-      {/* 2. Back Bar (-Z) */}
-      <group position={[0, 0, -halfSpan]}>
-        <mesh material={metalMat} position={[0, 0, 0]} castShadow>
-          <boxGeometry args={[size, barHeight, barWidth]} />
-        </mesh>
-        <mesh material={diffuserMat} position={[0, -barHeight / 2 - diffuserHeight / 2, 0]}>
-          <boxGeometry args={[size, diffuserHeight, barWidth]} />
-        </mesh>
-        <mesh material={diffuserMat} position={[0, -barHeight / 4, barWidth / 2 + 0.005]}>
-          <boxGeometry args={[size - 2 * barWidth, barHeight / 2, 0.012]} />
-        </mesh>
-      </group>
-
-      {/* 3. Left Bar (-X) */}
-      <group position={[-halfSpan, 0, 0]}>
-        <mesh material={metalMat} position={[0, 0, 0]} castShadow>
-          <boxGeometry args={[barWidth, barHeight, sideLength]} />
-        </mesh>
-        <mesh material={diffuserMat} position={[0, -barHeight / 2 - diffuserHeight / 2, 0]}>
-          <boxGeometry args={[barWidth, diffuserHeight, sideLength]} />
-        </mesh>
-        <mesh material={diffuserMat} position={[barWidth / 2 + 0.005, -barHeight / 4, 0]}>
-          <boxGeometry args={[0.012, barHeight / 2, sideLength]} />
-        </mesh>
-      </group>
-
-      {/* 4. Right Bar (+X) */}
-      <group position={[halfSpan, 0, 0]}>
-        <mesh material={metalMat} position={[0, 0, 0]} castShadow>
-          <boxGeometry args={[barWidth, barHeight, sideLength]} />
-        </mesh>
-        <mesh material={diffuserMat} position={[0, -barHeight / 2 - diffuserHeight / 2, 0]}>
-          <boxGeometry args={[barWidth, diffuserHeight, sideLength]} />
-        </mesh>
-        <mesh material={diffuserMat} position={[-barWidth / 2 - 0.005, -barHeight / 4, 0]}>
-          <boxGeometry args={[0.012, barHeight / 2, sideLength]} />
-        </mesh>
-      </group>
-    </group>
-  );
-};
-
-const ArchitecturalChandelier: React.FC = () => {
+const CornerGoldRingChandelier: React.FC<CornerGoldRingChandelierProps> = ({ position, showLight }) => {
   const [isOn, setIsOn] = useState(true);
   const currentLvl = useRef(1);
-  const cameraPreset = useGameStore((s) => s.cameraPreset);
-
-  const physicalMeshesRef = useRef<THREE.Group>(null);
+  const isAnimatingRef = useRef(false);
   const pointLightRef = useRef<THREE.PointLight>(null);
-  const upperSpotRef = useRef<THREE.SpotLight>(null);
-  const lowerSpotRef = useRef<THREE.SpotLight>(null);
 
-  // Materials created ONCE on mount — NEVER recompiled on click!
-  const { metalMat, diffuserMat, cableMat } = useMemo(() => {
-    const metalMat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color('#1a1a1d'),
-      roughness: 0.35,
-      metalness: 0.7,
+  const { goldMat, ledMat } = useMemo(() => {
+    const goldMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#d4af37'),
+      metalness: 0.88,
+      roughness: 0.22,
+      emissive: new THREE.Color('#946b10'),
+      emissiveIntensity: 0.5,
     });
 
-    const diffuserMat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color('#fffbf0'),
-      emissive: new THREE.Color('#fff5dd'),
-      emissiveIntensity: 5.0,
-      roughness: 0.12,
+    const ledMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#ffffff'),
+      emissive: new THREE.Color('#ffaa18'),
+      emissiveIntensity: 12.0,
+      roughness: 0.1,
       metalness: 0.05,
       toneMapped: false,
     });
 
-    const cableMat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color('#141416'),
-      roughness: 0.4,
-      metalness: 0.85,
-    });
-
-    return { metalMat, diffuserMat, cableMat };
+    return { goldMat, ledMat };
   }, []);
 
-  // Tucked right up against the 9.50m ceiling (lowest bar at 8.63m, safely above camera)
-  const upperY = 9.15;
-  const lowerY = 8.70;
+  useEffect(() => {
+    return () => {
+      goldMat.dispose();
+      ledMat.dispose();
+    };
+  }, [goldMat, ledMat]);
 
-  // Real-time zero-lag visibility check: Automatically hide physical chandelier when in top view or high-angle overhead orbit
-  useFrame(({ camera }, delta: number) => {
-    const dx = camera.position.x;
-    const dz = camera.position.z;
-    const horizDist = Math.hypot(dx, dz);
-    const dy = camera.position.y - 1.35;
-    const polarAngle = Math.atan2(horizDist, Math.max(0.01, dy));
-
-    // Hide physical meshes when trying top view or viewing board from high overhead
-    const isTopView = cameraPreset === 'top' || polarAngle < 1.05 || (camera.position.y > 4.5 && horizDist < 5.8);
-
-    if (physicalMeshesRef.current) {
-      physicalMeshesRef.current.visible = !isTopView;
-    }
+  useFrame((_, delta: number) => {
+    if (!isAnimatingRef.current) return;
 
     const target = isOn ? 1 : 0;
-    currentLvl.current = THREE.MathUtils.damp(currentLvl.current, target, 24, delta);
+    currentLvl.current = THREE.MathUtils.damp(currentLvl.current, target, 26, delta);
     const lvl = currentLvl.current;
 
-    diffuserMat.emissiveIntensity = lvl * 5.0;
-    diffuserMat.color.setRGB(
-      0.82 + lvl * 0.18,
-      0.82 + lvl * 0.16,
-      0.84 + lvl * 0.10
-    );
+    ledMat.emissiveIntensity = lvl * 12.0;
+    ledMat.color.setRGB(0.75 + lvl * 0.25, 0.72 + lvl * 0.28, 0.65 + lvl * 0.35);
+    goldMat.emissiveIntensity = lvl * 0.5;
 
-    if (pointLightRef.current) pointLightRef.current.intensity = lvl * 2.6;
-    if (upperSpotRef.current) upperSpotRef.current.intensity = lvl * 2.6;
-    if (lowerSpotRef.current) lowerSpotRef.current.intensity = lvl * 4.2;
+    if (pointLightRef.current) {
+      pointLightRef.current.intensity = lvl * 4.5;
+    }
+
+    if (Math.abs(lvl - target) < 0.002) {
+      currentLvl.current = target;
+      ledMat.emissiveIntensity = target * 12.0;
+      goldMat.emissiveIntensity = target * 0.5;
+      if (pointLightRef.current) pointLightRef.current.intensity = target * 4.5;
+      isAnimatingRef.current = false;
+    }
   });
 
+  if (!cornerChandelierStatic) return null;
+
   return (
-    <group>
-      {/* Physical Chandelier Geometry — Instantly hides via ref.current.visible when in top view */}
-      <group
-        ref={physicalMeshesRef}
+    <group position={position}>
+      {/* Click target only on chandelier rings volume */}
+      <mesh
+        position={[0, 7.95, 0]}
+        geometry={cornerChandelierStatic.hitSphereGeo}
         onClick={(e) => {
           e.stopPropagation();
+          isAnimatingRef.current = true;
           setIsOn((prev) => !prev);
         }}
         onPointerOver={(e) => {
@@ -1161,316 +813,85 @@ const ArchitecturalChandelier: React.FC = () => {
           document.body.style.cursor = 'auto';
         }}
       >
-        {/* Invisible hit target for smooth, easy clicking */}
-        <mesh position={[0, (upperY + lowerY) / 2, 0]}>
-          <boxGeometry args={[3.4, 1.2, 3.4]} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-        </mesh>
-
-        {/* 1. Ceiling Canopy Mount */}
-        <group position={[0, 9.48, 0]}>
-          <mesh material={metalMat} castShadow>
-            <boxGeometry args={[1.8, 0.04, 0.46]} />
-          </mesh>
-          {[-0.65, 0.65].map((cx, idx) => (
-            <React.Fragment key={idx}>
-              <mesh material={cableMat} position={[cx, -0.02, -0.12]}>
-                <cylinderGeometry args={[0.016, 0.016, 0.04, 16]} />
-              </mesh>
-              <mesh material={cableMat} position={[cx, -0.02, 0.12]}>
-                <cylinderGeometry args={[0.016, 0.016, 0.04, 16]} />
-              </mesh>
-            </React.Fragment>
-          ))}
-        </group>
-
-        {/* 2. Top-tier Suspension Cables (from canopy 9.48m down to upperY 9.15m) */}
-        {[-0.65, 0.65].map((cx, idx) => (
-          <React.Fragment key={idx}>
-            <mesh material={cableMat} position={[cx, 9.315, -0.12]}>
-              <cylinderGeometry args={[0.0035, 0.0035, 0.33, 12]} />
-            </mesh>
-            <mesh material={cableMat} position={[cx, 9.315, 0.12]}>
-              <cylinderGeometry args={[0.0035, 0.0035, 0.33, 12]} />
-            </mesh>
-          </React.Fragment>
-        ))}
-
-        {/* 3. Upper Square Tier (3.2m x 3.2m) */}
-        <group position={[0, upperY, 0]}>
-          <HollowSquare
-            size={3.2}
-            barWidth={0.14}
-            barHeight={0.14}
-            diffuserHeight={0.024}
-            metalMat={metalMat}
-            diffuserMat={diffuserMat}
-          />
-        </group>
-
-        {/* 4. Inter-tier Suspension Cables (from upperY 9.15m down to lowerY 8.70m) */}
-        {[-0.85, 0.85].map((cx, idx) => (
-          <React.Fragment key={idx}>
-            <mesh material={cableMat} position={[cx, 8.925, -0.85]}>
-              <cylinderGeometry args={[0.0035, 0.0035, 0.45, 12]} />
-            </mesh>
-            <mesh material={cableMat} position={[cx, 8.925, 0.85]}>
-              <cylinderGeometry args={[0.0035, 0.0035, 0.45, 12]} />
-            </mesh>
-          </React.Fragment>
-        ))}
-
-        {/* 5. Lower Square Tier (2.1m x 2.1m) */}
-        <group position={[0, lowerY, 0]}>
-          <HollowSquare
-            size={2.1}
-            barWidth={0.14}
-            barHeight={0.14}
-            diffuserHeight={0.024}
-            metalMat={metalMat}
-            diffuserMat={diffuserMat}
-          />
-        </group>
-      </group>
-
-      {/* Central Focused Downlights — Always present so chessboard remains beautifully illuminated */}
-      <pointLight
-        ref={pointLightRef}
-        position={[0, 9.2, 0]}
-        color="#ffe9be"
-        intensity={2.6}
-        distance={20}
-        decay={1.8}
-      />
-      <spotLight
-        ref={upperSpotRef}
-        position={[0, 9.3, 0]}
-        target-position={[0, 1.35, 0]}
-        color="#fff6e2"
-        intensity={2.6}
-        angle={1.1}
-        penumbra={0.8}
-        distance={16}
-      />
-      <spotLight
-        ref={lowerSpotRef}
-        position={[0, 9.1, 0]}
-        target-position={[0, 1.35, 0]}
-        color="#fff8ed"
-        intensity={4.2}
-        angle={0.92}
-        penumbra={0.7}
-        distance={16}
-        castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
-        shadow-bias={-0.0003}
-      />
-    </group>
-  );
-};
-
-// ==================================================================================
-// CORNER GOLD RING CHANDELIER (Matching User Reference Photo 2)
-// 3 dynamically angled circular rings in brushed champagne gold with glowing
-// ultra-radiant golden LED diffuser tubes running directly on the rings.
-// NO giant sphere overlays — the rings themselves glow powerfully!
-// Performance optimized: Zero shader recompile, snappy smooth 60 FPS transitions.
-// ==================================================================================
-interface CornerGoldRingChandelierProps {
-  position: [number, number, number];
-  rotation?: [number, number, number];
-}
-
-const CornerGoldRingChandelier: React.FC<CornerGoldRingChandelierProps> = ({
-  position,
-  rotation = [0, 0, 0],
-}) => {
-  const [isOn, setIsOn] = useState(true);
-  const currentLvl = useRef(1);
-
-  const pointLightRef = useRef<THREE.PointLight>(null);
-  const spotLightRef = useRef<THREE.SpotLight>(null);
-  const ceilingLightRef = useRef<THREE.PointLight>(null);
-
-  // Materials created ONCE on mount — NEVER recompiled on click!
-  const { goldMat, ledMat, cableMat } = useMemo(() => {
-    // Brushed champagne gold metal body
-    const goldMat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color('#d4af37'),
-      metalness: 0.88,
-      roughness: 0.22,
-      emissive: new THREE.Color('#946b10'),
-      emissiveIntensity: 0.5,
-    });
-
-    // Highly radiant golden LED silicone diffuser tube running directly on the rings
-    // toneMapped: false allows the LED to punch through with blazing intense golden luminescence
-    const ledMat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color('#ffffff'),
-      emissive: new THREE.Color('#ffaa18'),
-      emissiveIntensity: 12.0,
-      roughness: 0.1,
-      metalness: 0.05,
-      toneMapped: false,
-    });
-
-    // Slender silver steel suspension aircraft cables
-    const cableMat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color('#c5c7cb'),
-      metalness: 0.9,
-      roughness: 0.2,
-    });
-
-    return { goldMat, ledMat, cableMat };
-  }, []);
-
-  // Snappy, clean, 60 FPS smooth transition (~0.12s) without ANY stutter or lag
-  useFrame((_, delta: number) => {
-    const target = isOn ? 1 : 0;
-    currentLvl.current = THREE.MathUtils.damp(currentLvl.current, target, 26, delta);
-    const lvl = currentLvl.current;
-
-    // Rings themselves glow with intense, clean luminous power
-    ledMat.emissiveIntensity = lvl * 12.0;
-    ledMat.color.setRGB(
-      0.75 + lvl * 0.25,
-      0.72 + lvl * 0.28,
-      0.65 + lvl * 0.35
-    );
-
-    // Gold metal body carries warm golden ambient reflection
-    goldMat.emissiveIntensity = lvl * 0.5;
-
-    // Update real scene lights smoothly
-    if (pointLightRef.current) pointLightRef.current.intensity = lvl * 5.5;
-    if (spotLightRef.current) spotLightRef.current.intensity = lvl * 6.5;
-    if (ceilingLightRef.current) ceilingLightRef.current.intensity = lvl * 3.5;
-  });
-
-  return (
-    <group
-      position={position}
-      rotation={rotation}
-      onClick={(e) => {
-        e.stopPropagation();
-        setIsOn((prev) => !prev);
-      }}
-      onPointerOver={(e) => {
-        e.stopPropagation();
-        document.body.style.cursor = 'pointer';
-      }}
-      onPointerOut={() => {
-        document.body.style.cursor = 'auto';
-      }}
-    >
-      {/* Invisible easy-click sphere so user never misses the thin torus geometry */}
-      <mesh position={[0, 7.35, 0]}>
-        <sphereGeometry args={[1.7, 12, 12]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      {/* 1. Round Brushed Gold Ceiling Canopy Mount */}
-      <mesh material={goldMat} position={[0, 9.46, 0]} castShadow>
-        <cylinderGeometry args={[0.38, 0.4, 0.08, 32]} />
-      </mesh>
 
-      {/* 2. Three Dynamic Intersecting Gold Rings (Glowing directly on the rings!) */}
-      {/* Ring 1 (Top / Outer Ring — Large, slightly tilted) */}
-      <group position={[0, 7.8, 0]} rotation={[0.22, 0.35, -0.15]}>
-        {/* Brushed gold metal casing */}
-        <mesh material={goldMat} castShadow>
-          <torusGeometry args={[1.3, 0.042, 24, 72]} />
-        </mesh>
-        {/* Powerful glowing golden LED diffuser tube on top/inner rim */}
-        <mesh material={ledMat} position={[0, 0.016, 0]}>
-          <torusGeometry args={[1.3, 0.026, 16, 72]} />
-        </mesh>
+      {/* Ceiling Canopy mounted cleanly at ROOM_HEIGHT */}
+      <mesh
+        material={goldMat}
+        position={[0, ROOM_HEIGHT - 0.04, 0]}
+        geometry={cornerChandelierStatic.canopyGeo}
+        raycast={NO_RAYCAST}
+      />
+
+      {/* Ring 1 */}
+      <group position={[0, 8.4, 0]} rotation={[0.22, 0.35, -0.15]}>
+        <mesh material={goldMat} geometry={cornerChandelierStatic.ring1Geo} raycast={NO_RAYCAST} />
+        <mesh material={ledMat} position={[0, 0.016, 0]} geometry={cornerChandelierStatic.led1Geo} raycast={NO_RAYCAST} />
       </group>
 
-      {/* Ring 2 (Middle Ring — Medium, angled crossing) */}
-      <group position={[0.08, 7.35, -0.05]} rotation={[-0.32, -0.25, 0.28]}>
-        {/* Brushed gold metal casing */}
-        <mesh material={goldMat} castShadow>
-          <torusGeometry args={[0.92, 0.038, 24, 72]} />
-        </mesh>
-        {/* Powerful glowing golden LED diffuser tube */}
-        <mesh material={ledMat} position={[0, 0.015, 0]}>
-          <torusGeometry args={[0.92, 0.024, 16, 72]} />
-        </mesh>
+      {/* Ring 2 */}
+      <group position={[0.08, 7.95, -0.05]} rotation={[-0.32, -0.25, 0.28]}>
+        <mesh material={goldMat} geometry={cornerChandelierStatic.ring2Geo} raycast={NO_RAYCAST} />
+        <mesh material={ledMat} position={[0, 0.015, 0]} geometry={cornerChandelierStatic.led2Geo} raycast={NO_RAYCAST} />
       </group>
 
-      {/* Ring 3 (Bottom / Inner Ring — Small, steeply angled) */}
-      <group position={[-0.05, 6.9, 0.06]} rotation={[0.42, 0.45, 0.35]}>
-        {/* Brushed gold metal casing */}
-        <mesh material={goldMat} castShadow>
-          <torusGeometry args={[0.62, 0.034, 24, 72]} />
-        </mesh>
-        {/* Powerful glowing golden LED diffuser tube */}
-        <mesh material={ledMat} position={[0, 0.014, 0]}>
-          <torusGeometry args={[0.62, 0.022, 16, 72]} />
-        </mesh>
+      {/* Ring 3 */}
+      <group position={[-0.05, 7.5, 0.06]} rotation={[0.42, 0.45, 0.35]}>
+        <mesh material={goldMat} geometry={cornerChandelierStatic.ring3Geo} raycast={NO_RAYCAST} />
+        <mesh material={ledMat} position={[0, 0.014, 0]} geometry={cornerChandelierStatic.led3Geo} raycast={NO_RAYCAST} />
       </group>
 
-      {/* 3. Slender Suspension Aircraft Cables */}
-      {/* Cable length: 9.42 - 7.8 = 1.62; Midpoint: y = 8.61 */}
-      {[-0.55, 0.55].map((cx, idx) => (
-        <React.Fragment key={idx}>
-          <mesh material={cableMat} position={[cx, 8.61, -0.35]}>
-            <cylinderGeometry args={[0.0025, 0.0025, 1.62, 8]} />
-          </mesh>
-          <mesh material={cableMat} position={[cx, 8.61, 0.35]}>
-            <cylinderGeometry args={[0.0025, 0.0025, 1.62, 8]} />
-          </mesh>
-        </React.Fragment>
-      ))}
+      {/* Suspension Cables */}
+      <mesh material={cornerChandelierStatic.cableMat} geometry={cornerChandelierStatic.cablesGeo} raycast={NO_RAYCAST} />
 
-      {/* Inter-ring suspension cables */}
-      {/* Length: 7.8 - 7.35 = 0.45; Midpoint: y = 7.575 */}
-      {[-0.45, 0.45].map((cx, idx) => (
-        <React.Fragment key={idx}>
-          <mesh material={cableMat} position={[cx, 7.575, -0.2]}>
-            <cylinderGeometry args={[0.0025, 0.0025, 0.45, 8]} />
-          </mesh>
-          <mesh material={cableMat} position={[cx, 7.575, 0.2]}>
-            <cylinderGeometry args={[0.0025, 0.0025, 0.45, 8]} />
-          </mesh>
-        </React.Fragment>
-      ))}
-
-      {/* 4. Golden Lighting: Mounted permanently, intensity modulated smoothly with 0 lag */}
-      <pointLight
-        ref={pointLightRef}
-        position={[0, 7.3, 0]}
-        color="#ffa826"
-        intensity={5.0}
-        distance={28}
-        decay={1.6}
-      />
-      <pointLight
-        ref={ceilingLightRef}
-        position={[0, 8.8, 0]}
-        color="#ffc866"
-        intensity={3.0}
-        distance={12}
-        decay={2}
-      />
-      <spotLight
-        ref={spotLightRef}
-        position={[0, 7.2, 0]}
-        target-position={[0, 0, 0]}
-        color="#ffa31a"
-        intensity={6.5}
-        angle={1.15}
-        penumbra={0.7}
-        distance={24}
-      />
+      {/* Consolidated single warm golden illumination per chandelier on High/Ultra */}
+      {showLight && (
+        <pointLight
+          ref={pointLightRef}
+          position={[0, 7.8, 0]}
+          color="#ffa826"
+          intensity={isOn ? 4.5 : 0}
+          distance={26}
+          decay={1.6}
+        />
+      )}
     </group>
   );
 };
+
 // ==================================================================================
-// ARCHITECTURAL WALL FEATURE (Matching reference photo)
-// Stucco center wall flanked by rich dark walnut portal columns & brass reveals
+// ARCHITECTURAL WALL FEATURE (Scaled smoothly to 36m width x 14.6m height)
 // ==================================================================================
+const wallArchStatic = typeof document !== 'undefined' ? (() => {
+  const wallMat = new THREE.MeshStandardMaterial({ color: '#ebe6de', roughness: 0.78 });
+  const pillarMat = new THREE.MeshStandardMaterial({ color: '#f2eee8', roughness: 0.68 });
+  const walnutMat = new THREE.MeshStandardMaterial({ color: '#2d1c13', roughness: 0.42 });
+  const goldMat = new THREE.MeshStandardMaterial({ color: '#c6a45c', metalness: 0.85, roughness: 0.25 });
+  const baseMat = new THREE.MeshStandardMaterial({ color: '#281810', roughness: 0.45 });
+
+  const backWallGeo = new THREE.PlaneGeometry(ROOM_SIZE, ROOM_HEIGHT);
+  const pillarGeo = new THREE.BoxGeometry(10.5, ROOM_HEIGHT, 0.12);
+
+  const colSingle = new THREE.BoxGeometry(0.7, ROOM_HEIGHT, 0.2);
+  const columnsGeo = mergeTransformedParts([
+    { geo: colSingle, pos: [-5.6, ROOM_HEIGHT / 2, 0.12] },
+    { geo: colSingle, pos: [5.6, ROOM_HEIGHT / 2, 0.12] },
+  ]);
+  colSingle.dispose();
+
+  const trimSingle = new THREE.BoxGeometry(0.04, ROOM_HEIGHT, 0.04);
+  const goldTrimsGeo = mergeTransformedParts([
+    { geo: trimSingle, pos: [-5.22, ROOM_HEIGHT / 2, 0.2] },
+    { geo: trimSingle, pos: [5.22, ROOM_HEIGHT / 2, 0.2] },
+  ]);
+  trimSingle.dispose();
+
+  const baseboardGeo = new THREE.BoxGeometry(ROOM_SIZE, 0.44, 0.1);
+
+  return { wallMat, pillarMat, walnutMat, goldMat, baseMat, backWallGeo, pillarGeo, columnsGeo, goldTrimsGeo, baseboardGeo };
+})() : null;
+
 interface ArchitecturalWallProps {
   headingLine1: string;
   headingLine2: string;
@@ -1478,6 +899,8 @@ interface ArchitecturalWallProps {
   headingLine4: string;
   position: [number, number, number];
   rotation: [number, number, number];
+  showWallSpot?: boolean;
+  showLampLight?: boolean;
 }
 
 const ArchitecturalWall: React.FC<ArchitecturalWallProps> = ({
@@ -1487,51 +910,20 @@ const ArchitecturalWall: React.FC<ArchitecturalWallProps> = ({
   headingLine4,
   position,
   rotation,
+  showWallSpot = false,
+  showLampLight = false,
 }) => {
+  if (!wallArchStatic) return null;
+
   return (
     <group position={position} rotation={rotation}>
-      {/* 1. Main Background Wall (Pearl Ivory Cream Stucco) */}
-      <mesh position={[0, 4.75, 0]} receiveShadow>
-        <planeGeometry args={[32, 9.5]} />
-        <meshStandardMaterial color="#ebe6de" roughness={0.75} />
-      </mesh>
+      <mesh position={[0, ROOM_HEIGHT / 2, 0]} geometry={wallArchStatic.backWallGeo} material={wallArchStatic.wallMat} raycast={NO_RAYCAST} />
+      <mesh position={[0, ROOM_HEIGHT / 2, 0.08]} geometry={wallArchStatic.pillarGeo} material={wallArchStatic.pillarMat} raycast={NO_RAYCAST} />
+      <mesh geometry={wallArchStatic.columnsGeo} material={wallArchStatic.walnutMat} raycast={NO_RAYCAST} />
+      <mesh geometry={wallArchStatic.goldTrimsGeo} material={wallArchStatic.goldMat} raycast={NO_RAYCAST} />
+      <mesh position={[0, 0.22, 0.2]} geometry={wallArchStatic.baseboardGeo} material={wallArchStatic.baseMat} raycast={NO_RAYCAST} />
 
-      {/* 2. Central Architectural Feature Pillar Wall (Warm cream, proud of main wall) */}
-      <mesh position={[0, 4.75, 0.08]} receiveShadow>
-        <boxGeometry args={[10.5, 9.5, 0.12]} />
-        <meshStandardMaterial color="#f2eee8" roughness={0.65} />
-      </mesh>
-
-      {/* 3. Dark Walnut Architectural Portal Frames (Left & Right, matching photo) */}
-      {/* Left Walnut Portal Column */}
-      <mesh position={[-5.6, 4.75, 0.12]} castShadow receiveShadow>
-        <boxGeometry args={[0.7, 9.5, 0.2]} />
-        <meshStandardMaterial color="#2d1c13" roughness={0.4} />
-      </mesh>
-      {/* Left Portal Inset Gold Reveal Trim */}
-      <mesh position={[-5.22, 4.75, 0.2]}>
-        <boxGeometry args={[0.04, 9.5, 0.04]} />
-        <meshStandardMaterial color="#c6a45c" metalness={0.85} roughness={0.25} />
-      </mesh>
-
-      {/* Right Walnut Portal Column */}
-      <mesh position={[5.6, 4.75, 0.12]} castShadow receiveShadow>
-        <boxGeometry args={[0.7, 9.5, 0.2]} />
-        <meshStandardMaterial color="#2d1c13" roughness={0.4} />
-      </mesh>
-      {/* Right Portal Inset Gold Reveal Trim */}
-      <mesh position={[5.22, 4.75, 0.2]}>
-        <boxGeometry args={[0.04, 9.5, 0.04]} />
-        <meshStandardMaterial color="#c6a45c" metalness={0.85} roughness={0.25} />
-      </mesh>
-
-      {/* 4. Dark Walnut Baseboard along floor */}
-      <mesh position={[0, 0.22, 0.2]}>
-        <boxGeometry args={[32, 0.44, 0.1]} />
-        <meshStandardMaterial color="#281810" roughness={0.45} />
-      </mesh>
-
-      {/* 5. The Signature Wall Artwork (Centered, floating on the feature wall) */}
+      {/* Main Central Wall Artwork (Untouched position [0, 5.2, 0.25]) */}
       <WallArtwork
         headingLine1={headingLine1}
         headingLine2={headingLine2}
@@ -1539,79 +931,60 @@ const ArchitecturalWall: React.FC<ArchitecturalWallProps> = ({
         headingLine4={headingLine4}
         position={[0, 5.2, 0.25]}
         rotation={[0, 0, 0]}
-        width={3.8}
-        height={5.0}
+        showAccentSpotLight={showWallSpot}
       />
 
-      {/* 6. The Modern Walnut Credenza directly beneath the Artwork */}
       <Credenza position={[0, 0, 0.6]} />
-
-      {/* 7. Designer Brass Floor Lamp standing beside the credenza */}
-      <FloorLamp position={[-3.6, 0, 0.8]} rotation={[0, 0.25, 0]} />
+      <FloorLamp position={[-3.6, 0, 0.8]} rotation={[0, 0.25, 0]} showLight={showLampLight} />
     </group>
   );
 };
 
 // ==================================================================================
-// EUROPEAN OAK HARDWOOD FLOOR (Matching Reference Photo)
-// Warm honey-golden amber wide-plank oak flooring with authentic wood grain,
-// staggered butt joints, natural knots, and subtle bevel seams across the entire 32m room.
-// The Persian/Designer rug sits on top at y = 0.015, preserving the carpet in the center.
+// EUROPEAN OAK HARDWOOD FLOOR (36m x 36m matching oak plank proportions)
 // ==================================================================================
-const EuropeanOakHardwoodFloor: React.FC = () => {
+const EuropeanOakHardwoodFloor: React.FC<{ receiveShadow: boolean }> = ({ receiveShadow }) => {
   const oakTexture = useMemo(() => {
     if (typeof document === 'undefined') return null;
+    const caps = detectDeviceCapabilities();
+    const res = caps.isLowEndHardware ? 512 : 1024;
+    const scale = res / 1024;
+
     const canvas = document.createElement('canvas');
-    canvas.width = 1024;
-    canvas.height = 1024;
+    canvas.width = res;
+    canvas.height = res;
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
-    // 16 wide horizontal plank rows
+    ctx.scale(scale, scale);
+
     const numRows = 16;
-    const rowHeight = canvas.height / numRows; // 64px per plank row
+    const rowHeight = 1024 / numRows;
 
-    // Base oak tones matching user photo: warm golden amber European oak
-    const oakTones = [
-      '#ba8f5c',
-      '#af8452',
-      '#b68c58',
-      '#a67c49',
-      '#c29965',
-      '#b28755',
-      '#9e7543',
-      '#bb9260',
-    ];
+    const oakTones = ['#ba8f5c', '#af8452', '#b68c58', '#a67c49', '#c29965', '#b28755', '#9e7543', '#bb9260'];
 
-    // Seeded pseudo-random generator for consistent, seamless appearance
     let seed = 42;
     const random = () => {
       seed = (seed * 9301 + 49297) % 233280;
       return seed / 233280;
     };
 
-    // Draw each plank row
     for (let r = 0; r < numRows; r++) {
       const y = r * rowHeight;
-
-      // Staggered vertical end joints for this row
       const offsets = [0];
       const startOffset = ((r * 341) % 400) + 200;
       if (startOffset < 900) offsets.push(startOffset);
       if (startOffset + 475 < 975) offsets.push(startOffset + 475);
-      offsets.push(canvas.width);
+      offsets.push(1024);
 
       for (let p = 0; p < offsets.length - 1; p++) {
         const x1 = offsets[p];
         const x2 = offsets[p + 1];
         const pWidth = x2 - x1;
 
-        // Base color with natural plank-to-plank subtle shade variation
-        const baseColor = oakTones[(r * 3 + p) % oakTones.length];
-        ctx.fillStyle = baseColor;
+        ctx.fillStyle = oakTones[(r * 3 + p) % oakTones.length];
         ctx.fillRect(x1, y, pWidth, rowHeight);
 
-        // Subtle gradient across plank width for realistic ambient light
         const plankGrad = ctx.createLinearGradient(x1, y, x1, y + rowHeight);
         plankGrad.addColorStop(0.0, 'rgba(255, 255, 255, 0.08)');
         plankGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.0)');
@@ -1619,21 +992,16 @@ const EuropeanOakHardwoodFloor: React.FC = () => {
         ctx.fillStyle = plankGrad;
         ctx.fillRect(x1, y, pWidth, rowHeight);
 
-        // Batched longitudinal oak wood fibers
         const darkFibers = new Path2D();
         const lightFibers = new Path2D();
-        const numFibers = 16;
-        for (let f = 0; f < numFibers; f++) {
-          const fy = y + (f / numFibers) * rowHeight + (random() - 0.5) * 2;
+        for (let f = 0; f < 14; f++) {
+          const fy = y + (f / 14) * rowHeight + (random() - 0.5) * 2;
           const targetPath = random() > 0.45 ? darkFibers : lightFibers;
           targetPath.moveTo(x1, fy);
-
           const waveFreq = 0.016 + random() * 0.012;
           const waveAmp = 1.0 + random() * 2.0;
-          const step = 25;
-          for (let wx = x1 + step; wx <= x2; wx += step) {
-            const wy = fy + Math.sin(wx * waveFreq + r) * waveAmp;
-            targetPath.lineTo(wx, wy);
+          for (let wx = x1 + 32; wx <= x2; wx += 32) {
+            targetPath.lineTo(wx, fy + Math.sin(wx * waveFreq + r) * waveAmp);
           }
         }
         ctx.strokeStyle = 'rgba(95, 62, 32, 0.18)';
@@ -1644,11 +1012,10 @@ const EuropeanOakHardwoodFloor: React.FC = () => {
         ctx.lineWidth = 1.0;
         ctx.stroke(lightFibers);
 
-        // Realistic oak cathedral grain arcs on select planks
-        if (random() > 0.6) {
+        if (random() > 0.65) {
           const cathCenter = x1 + pWidth * (0.3 + random() * 0.4);
           const cathY = y + rowHeight * (0.4 + random() * 0.2);
-          for (let c = 5; c <= 30; c += 6) {
+          for (let c = 6; c <= 28; c += 7) {
             ctx.strokeStyle = `rgba(80, 50, 24, ${0.14 + random() * 0.10})`;
             ctx.lineWidth = 1.0;
             ctx.beginPath();
@@ -1657,35 +1024,16 @@ const EuropeanOakHardwoodFloor: React.FC = () => {
           }
         }
 
-        // Natural wood knot with swirling grain halo on occasional planks
         if (random() > 0.78) {
           const knotX = x1 + pWidth * (0.2 + random() * 0.6);
           const knotY = y + rowHeight * (0.3 + random() * 0.4);
           const knotR = 4 + random() * 5;
-
           ctx.fillStyle = '#422814';
           ctx.beginPath();
           ctx.ellipse(knotX, knotY, knotR, knotR * 0.65, random() * 0.3, 0, Math.PI * 2);
           ctx.fill();
-
-          for (let kr = knotR + 3; kr <= knotR + 12; kr += 3) {
-            ctx.strokeStyle = `rgba(70, 42, 20, ${0.16 - (kr - knotR) * 0.01})`;
-            ctx.lineWidth = 1.0;
-            ctx.beginPath();
-            ctx.ellipse(knotX, knotY, kr * 1.3, kr * 0.85, random() * 0.2, 0, Math.PI * 2);
-            ctx.stroke();
-          }
         }
 
-        // Fine oak pores (tactile micro-ticks)
-        for (let pCount = 0; pCount < 18; pCount++) {
-          const px = x1 + random() * pWidth;
-          const py = y + random() * rowHeight;
-          ctx.fillStyle = 'rgba(75, 46, 22, 0.22)';
-          ctx.fillRect(px, py, 3 + random() * 5, 1);
-        }
-
-        // Vertical end butt joint seam between planks in the row
         if (x1 > 0) {
           ctx.strokeStyle = '#2d1b0c';
           ctx.lineWidth = 2.0;
@@ -1693,98 +1041,51 @@ const EuropeanOakHardwoodFloor: React.FC = () => {
           ctx.moveTo(x1, y);
           ctx.lineTo(x1, y + rowHeight);
           ctx.stroke();
-
-          // Highlight bevel edge
-          ctx.strokeStyle = 'rgba(255, 230, 190, 0.22)';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(x1 + 1.0, y);
-          ctx.lineTo(x1 + 1.0, y + rowHeight);
-          ctx.stroke();
         }
       }
 
-      // Horizontal V-groove chamfer seam between plank rows
       ctx.strokeStyle = '#2b190a';
       ctx.lineWidth = 2.0;
       ctx.beginPath();
       ctx.moveTo(0, y);
-      ctx.lineTo(canvas.width, y);
-      ctx.stroke();
-
-      // Top light bevel highlight line
-      ctx.strokeStyle = 'rgba(255, 235, 200, 0.20)';
-      ctx.lineWidth = 1.0;
-      ctx.beginPath();
-      ctx.moveTo(0, y + 2.0);
-      ctx.lineTo(canvas.width, y + 2.0);
+      ctx.lineTo(1024, y);
       ctx.stroke();
     }
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(5, 5); // 5x repeat across 32m room = elegant wide plank scale
+    texture.repeat.set(5.625, 5.625);
     texture.generateMipmaps = true;
     texture.minFilter = THREE.LinearMipmapLinearFilter;
-    texture.anisotropy = 16;
+    texture.anisotropy = caps.isTouch ? 4 : 8;
+    texture.colorSpace = THREE.SRGBColorSpace;
     return texture;
   }, []);
 
+  useEffect(() => {
+    return () => {
+      oakTexture?.dispose();
+    };
+  }, [oakTexture]);
+
   return (
-    <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-      <planeGeometry args={[32, 32]} />
-      <meshStandardMaterial
-        map={oakTexture || undefined}
-        roughness={0.36}
-        metalness={0.04}
-      />
+    <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow={receiveShadow} raycast={NO_RAYCAST}>
+      <planeGeometry args={[ROOM_SIZE, ROOM_SIZE]} />
+      <meshStandardMaterial map={oakTexture || undefined} roughness={0.36} metalness={0.04} />
     </mesh>
   );
 };
 
 // ==================================================================================
-// ARCHITECTURAL PARALLEL CEILING STRIP LIGHTS (Connecting the Four Chandeliers ONLY)
-// Dual parallel architectural linear profile lights attached to the ceiling,
-// connecting the four corner chandeliers (NW, NE, SW, SE) across North, South, East, and West.
-// All unnecessary center, mid-room, and diagonal ceiling strips removed.
-// - Ultra-high emissive power (intensity 18.0 with toneMapped: false)
-// - 3D downward-protruding diffuser bars with multi-sided glowing faces
-// - Additive translucent bloom halo for unmistakable radiant illumination
-// - Continuously & permanently ON (no toggle/click functionality)
+// WHITE PARALLEL CEILING STRIP LIGHTS (Connecting the 4 Golden Chandeliers ONLY)
+// Flush-mounted along ceiling height y = ROOM_HEIGHT - 0.06m (14.54m), safely above
+// max camera elevation (13.7m) so they NEVER cross the board or obstruct top-down /
+// vertical orbit views, NEVER flicker or disappear, and remain visually connected to
+// all 4 golden chandeliers. Rendered via ONLY 3 InstancedMesh draw calls!
 // ==================================================================================
-const ArchitecturalParallelCeilingStripLights: React.FC = () => {
-  const { housingMat, diffuserMat, haloMat } = useMemo(() => {
-    // Satin dark architectural aluminum extrusion channel
-    const housingMat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color('#141517'),
-      roughness: 0.35,
-      metalness: 0.8,
-    });
-
-    // Blazing ultra-radiant warm off-white silicone/acrylic LED diffuser
-    const diffuserMat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color('#ffffff'),
-      emissive: new THREE.Color('#fff7e0'),
-      emissiveIntensity: 18.0,
-      roughness: 0.05,
-      metalness: 0.0,
-      toneMapped: false,
-    });
-
-    // Soft additive bloom glow aura surrounding the strip
-    const haloMat = new THREE.MeshBasicMaterial({
-      color: new THREE.Color('#fffbe8'),
-      transparent: true,
-      opacity: 0.28,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
-
-    return { housingMat, diffuserMat, haloMat };
-  }, []);
-
+const stripLightAssets = typeof document !== 'undefined' ? (() => {
+  const length = CORNER_CHANDELIER_OFFSET * 2; // 25.6m span between corner chandeliers
   const trackWidth = 0.09;
   const trackDepth = 0.038;
   const diffuserWidth = 0.07;
@@ -1792,286 +1093,254 @@ const ArchitecturalParallelCeilingStripLights: React.FC = () => {
   const haloWidth = 0.16;
   const haloDepth = 0.065;
 
-  const yHousing = 9.47;
-  const yDiffuser = 9.442;
-  const yHalo = 9.435;
+  const housingGeo = new THREE.BoxGeometry(length, trackDepth, trackWidth);
+  const diffuserGeo = new THREE.BoxGeometry(length, diffuserDepth, diffuserWidth);
+  const haloGeo = new THREE.BoxGeometry(length, haloDepth, haloWidth);
 
-  // Spacing between the dual parallel tracks = 0.38m (15 inches)
+  const housingMat = new THREE.MeshStandardMaterial({ color: '#141517', roughness: 0.35, metalness: 0.8 });
+  const diffuserMat = new THREE.MeshStandardMaterial({
+    color: '#ffffff',
+    emissive: '#fff7e0',
+    emissiveIntensity: 18.0,
+    roughness: 0.05,
+    metalness: 0.0,
+    toneMapped: false,
+  });
+  const haloMat = new THREE.MeshBasicMaterial({
+    color: '#fffbe8',
+    transparent: true,
+    opacity: 0.28,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+
+  return { housingGeo, diffuserGeo, haloGeo, housingMat, diffuserMat, haloMat };
+})() : null;
+
+const STRIP_TRACK_TRANSFORMS: { x: number; z: number; rotY: number }[] = (() => {
   const offset = 0.19;
+  const c = CORNER_CHANDELIER_OFFSET;
+  return [
+    // North parallel rails
+    { x: 0, z: -c - offset, rotY: 0 },
+    { x: 0, z: -c + offset, rotY: 0 },
+    // South parallel rails
+    { x: 0, z: c - offset, rotY: 0 },
+    { x: 0, z: c + offset, rotY: 0 },
+    // West parallel rails
+    { x: -c - offset, z: 0, rotY: Math.PI / 2 },
+    { x: -c + offset, z: 0, rotY: Math.PI / 2 },
+    // East parallel rails
+    { x: c - offset, z: 0, rotY: Math.PI / 2 },
+    { x: c + offset, z: 0, rotY: Math.PI / 2 },
+  ];
+})();
 
-  // Helper for straight parallel run along X-axis
-  const renderXRun = (key: string, length: number, centerX: number, centerZ: number) => (
-    <React.Fragment key={key}>
-      {[-offset, offset].map((zOff, i) => (
-        <group key={`${key}-${i}`} position={[centerX, 0, centerZ + zOff]}>
-          {/* Aluminum Housing */}
-          <mesh material={housingMat} position={[0, yHousing, 0]}>
-            <boxGeometry args={[length, trackDepth, trackWidth]} />
-          </mesh>
-          {/* Blazing Off-White LED Diffuser (Extruded below housing for 3D visibility) */}
-          <mesh material={diffuserMat} position={[0, yDiffuser, 0]}>
-            <boxGeometry args={[length, diffuserDepth, diffuserWidth]} />
-          </mesh>
-          {/* Soft Additive Bloom Aura */}
-          <mesh material={haloMat} position={[0, yHalo, 0]}>
-            <boxGeometry args={[length, haloDepth, haloWidth]} />
-          </mesh>
-        </group>
-      ))}
-    </React.Fragment>
-  );
+const ArchitecturalParallelCeilingStripLights: React.FC = () => {
+  const housingRef = useRef<THREE.InstancedMesh>(null);
+  const diffuserRef = useRef<THREE.InstancedMesh>(null);
+  const haloRef = useRef<THREE.InstancedMesh>(null);
 
-  // Helper for straight parallel run along Z-axis
-  const renderZRun = (key: string, length: number, centerX: number, centerZ: number) => (
-    <React.Fragment key={key}>
-      {[-offset, offset].map((xOff, i) => (
-        <group key={`${key}-${i}`} position={[centerX + xOff, 0, centerZ]}>
-          {/* Aluminum Housing */}
-          <mesh material={housingMat} position={[0, yHousing, 0]}>
-            <boxGeometry args={[trackWidth, trackDepth, length]} />
-          </mesh>
-          {/* Blazing Off-White LED Diffuser */}
-          <mesh material={diffuserMat} position={[0, yDiffuser, 0]}>
-            <boxGeometry args={[diffuserWidth, diffuserDepth, length]} />
-          </mesh>
-          {/* Soft Additive Bloom Aura */}
-          <mesh material={haloMat} position={[0, yHalo, 0]}>
-            <boxGeometry args={[haloWidth, haloDepth, length]} />
-          </mesh>
-        </group>
-      ))}
-    </React.Fragment>
-  );
+  useEffect(() => {
+    const dummy = new THREE.Object3D();
+    const yHousing = ROOM_HEIGHT - 0.03;
+    const yDiffuser = ROOM_HEIGHT - 0.058;
+    const yHalo = ROOM_HEIGHT - 0.065;
+
+    STRIP_TRACK_TRANSFORMS.forEach((t, idx) => {
+      dummy.rotation.set(0, t.rotY, 0);
+      dummy.scale.set(1, 1, 1);
+
+      dummy.position.set(t.x, yHousing, t.z);
+      dummy.updateMatrix();
+      housingRef.current?.setMatrixAt(idx, dummy.matrix);
+
+      dummy.position.set(t.x, yDiffuser, t.z);
+      dummy.updateMatrix();
+      diffuserRef.current?.setMatrixAt(idx, dummy.matrix);
+
+      dummy.position.set(t.x, yHalo, t.z);
+      dummy.updateMatrix();
+      haloRef.current?.setMatrixAt(idx, dummy.matrix);
+    });
+
+    if (housingRef.current) housingRef.current.instanceMatrix.needsUpdate = true;
+    if (diffuserRef.current) diffuserRef.current.instanceMatrix.needsUpdate = true;
+    if (haloRef.current) haloRef.current.instanceMatrix.needsUpdate = true;
+  }, []);
+
+  if (!stripLightAssets) return null;
 
   return (
-    <group raycast={() => null}>
-      {/* =====================================================================
-          PARALLEL STRIP LIGHTS CONNECTING THE FOUR CHANDELIERS ONLY
-          ===================================================================== */}
-      {/* 1. North Run: connecting NW and NE corner chandeliers (x: -10.5 to +10.5 at z = -10.5) */}
-      {renderXRun('north-chandeliers', 21, 0, -10.5)}
-
-      {/* 2. South Run: connecting SW and SE corner chandeliers (x: -10.5 to +10.5 at z = +10.5) */}
-      {renderXRun('south-chandeliers', 21, 0, 10.5)}
-
-      {/* 3. West Run: connecting NW and SW corner chandeliers (z: -10.5 to +10.5 at x = -10.5) */}
-      {renderZRun('west-chandeliers', 21, -10.5, 0)}
-
-      {/* 4. East Run: connecting NE and SE corner chandeliers (z: -10.5 to +10.5 at x = +10.5) */}
-      {renderZRun('east-chandeliers', 21, 10.5, 0)}
-
-      {/* =====================================================================
-          Continuous Architectural Illumination along the 4 connecting runs
-          ===================================================================== */}
-      <pointLight position={[0, 9.1, -10.5]} color="#fffaf0" intensity={5.0} distance={20} decay={1.7} />
-      <pointLight position={[0, 9.1, 10.5]} color="#fffaf0" intensity={5.0} distance={20} decay={1.7} />
-      <pointLight position={[-10.5, 9.1, 0]} color="#fffaf0" intensity={5.0} distance={20} decay={1.7} />
-      <pointLight position={[10.5, 9.1, 0]} color="#fffaf0" intensity={5.0} distance={20} decay={1.7} />
+    <group>
+      <instancedMesh
+        ref={housingRef}
+        args={[stripLightAssets.housingGeo, stripLightAssets.housingMat, 8]}
+        frustumCulled={false}
+        raycast={NO_RAYCAST}
+      />
+      <instancedMesh
+        ref={diffuserRef}
+        args={[stripLightAssets.diffuserGeo, stripLightAssets.diffuserMat, 8]}
+        frustumCulled={false}
+        raycast={NO_RAYCAST}
+      />
+      <instancedMesh
+        ref={haloRef}
+        args={[stripLightAssets.haloGeo, stripLightAssets.haloMat, 8]}
+        frustumCulled={false}
+        raycast={NO_RAYCAST}
+      />
     </group>
   );
 };
 
+// Merged perimeter ceiling & cove moulding (2 draw calls instead of 5)
+const ceilingStatic = typeof document !== 'undefined' ? (() => {
+  const ceilingGeo = new THREE.PlaneGeometry(ROOM_SIZE, ROOM_SIZE);
+  const ceilingMat = new THREE.MeshStandardMaterial({ color: '#f7f5f0', roughness: 0.85, side: THREE.FrontSide });
+
+  const cEdge = ROOM_HALF_SIZE - 0.15;
+  const cY = ROOM_HEIGHT - 0.15;
+  const nsBar = new THREE.BoxGeometry(ROOM_SIZE, 0.3, 0.2);
+  const ewBar = new THREE.BoxGeometry(0.2, 0.3, ROOM_SIZE);
+  const coveGeo = mergeTransformedParts([
+    { geo: nsBar, pos: [0, cY, -cEdge] },
+    { geo: nsBar, pos: [0, cY, cEdge] },
+    { geo: ewBar, pos: [-cEdge, cY, 0] },
+    { geo: ewBar, pos: [cEdge, cY, 0] },
+  ]);
+  nsBar.dispose();
+  ewBar.dispose();
+
+  const coveMat = new THREE.MeshStandardMaterial({ color: '#ded8ce', roughness: 0.5 });
+  return { ceilingGeo, ceilingMat, coveGeo, coveMat };
+})() : null;
+
 // ==================================================================================
-// COMPLETE ROOM ENVIRONMENT — Ultra-luxurious gallery matching the reference photo
+// COMPLETE ROOM ENVIRONMENT
 // ==================================================================================
 export const RoomEnvironment: React.FC = () => {
+  const graphicsQuality = useGameStore((s) => s.graphicsQuality);
+
+  const shadowsEnabled = graphicsQuality !== 'low';
+  const showCornerLights = graphicsQuality === 'high' || graphicsQuality === 'ultra';
+  const showUltraAccents = graphicsQuality === 'ultra';
+  const shadowSize = graphicsQuality === 'ultra' ? 2048 : graphicsQuality === 'high' ? 1024 : 512;
+
   return (
     <group>
-      {/* Soft Architectural Gallery Lighting */}
-      <hemisphereLight color="#ffffff" groundColor="#dcd4c8" intensity={0.65} />
-      <ambientLight color="#fdfaf4" intensity={0.4} />
+      {/* Consolidated Adaptive Gallery Lighting (4 lights on low/medium, 8 on high, 16 on ultra vs 41 previously!) */}
+      <hemisphereLight color="#ffffff" groundColor="#dcd4c8" intensity={showCornerLights ? 0.72 : 0.92} />
+      <ambientLight color="#fdfaf4" intensity={showCornerLights ? 0.42 : 0.52} />
 
-      {/* Directional Soft Warm Fill Lighting */}
-      <directionalLight position={[10, 8, 8]} color="#fff8ee" intensity={0.5} />
-      <directionalLight position={[-10, 8, -8]} color="#f0e6d6" intensity={0.35} />
-
-      {/* FLOOR: Complete European Oak Hardwood Flooring (matching reference photo) */}
-      <EuropeanOakHardwoodFloor />
-
-      {/* Artistic Luxury Persian/Designer Rug beneath floating board */}
-      <RoyalDesignerRug />
-
-      {/* Soft Contact Shadow beneath floating board - optimized to static frame to save 60 render passes/sec */}
-      <ContactShadows
-        position={[0, 0.02, 0]}
-        opacity={0.65}
-        scale={13}
-        blur={1.6}
-        far={5}
-        frames={1}
-        resolution={512}
-        color="#1f2124"
+      {/* Primary Overhead Chessboard Key Light — Replaces central white chandelier light while removing its obstructing body */}
+      <directionalLight
+        position={[2.4, 13.5, 3.2]}
+        color="#fff7e8"
+        intensity={showCornerLights ? 1.35 : 1.55}
+        castShadow={shadowsEnabled}
+        shadow-mapSize-width={shadowSize}
+        shadow-mapSize-height={shadowSize}
+        shadow-camera-near={1}
+        shadow-camera-far={22}
+        shadow-camera-left={-5.8}
+        shadow-camera-right={5.8}
+        shadow-camera-top={5.8}
+        shadow-camera-bottom={-5.8}
+        shadow-bias={-0.0004}
+        shadow-normalBias={0.02}
       />
 
-      {/* CEILING: Clean Architectural Stucco (NO blocking beams!) */}
-      <mesh position={[0, 9.5, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[32, 32]} />
-        <meshStandardMaterial color="#f7f5f0" roughness={0.85} side={THREE.FrontSide} />
-      </mesh>
+      {/* Soft Counter-Fill Key for Balanced Piece Modeling */}
+      <directionalLight position={[-6, 10, -5]} color="#f2e8d8" intensity={0.42} />
 
-      {/* Ceiling Recessed Perimeter Cove Moulding with Warm LED Lighting */}
-      <mesh position={[0, 9.35, -15.85]}>
-        <boxGeometry args={[32, 0.3, 0.2]} />
-        <meshStandardMaterial color="#ded8ce" roughness={0.5} />
-      </mesh>
-      <mesh position={[0, 9.35, 15.85]}>
-        <boxGeometry args={[32, 0.3, 0.2]} />
-        <meshStandardMaterial color="#ded8ce" roughness={0.5} />
-      </mesh>
-      <mesh position={[-15.85, 9.35, 0]}>
-        <boxGeometry args={[0.2, 0.3, 32]} />
-        <meshStandardMaterial color="#ded8ce" roughness={0.5} />
-      </mesh>
-      <mesh position={[15.85, 9.35, 0]}>
-        <boxGeometry args={[0.2, 0.3, 32]} />
-        <meshStandardMaterial color="#ded8ce" roughness={0.5} />
-      </mesh>
+      {/* Floor & Luxury Rug */}
+      <EuropeanOakHardwoodFloor receiveShadow={shadowsEnabled} />
+      <RoyalDesignerRug receiveShadow={shadowsEnabled} />
 
-      {/* Off-White Parallel Strip Lights Attached to Ceiling Connecting the Chandeliers */}
+      {/* Cached Floor Contact Shadow (disabled on Performance 'low' for maximum speed; frames={1} otherwise) */}
+      {graphicsQuality !== 'low' && (
+        <ContactShadows
+          position={[0, 0.02, 0]}
+          opacity={0.62}
+          scale={13}
+          blur={1.6}
+          far={5}
+          frames={1}
+          resolution={graphicsQuality === 'medium' ? 256 : 512}
+          color="#1f2124"
+        />
+      )}
+
+      {/* Ceiling & Perimeter Cove Moulding */}
+      {ceilingStatic && (
+        <>
+          <mesh
+            position={[0, ROOM_HEIGHT, 0]}
+            rotation={[Math.PI / 2, 0, 0]}
+            geometry={ceilingStatic.ceilingGeo}
+            material={ceilingStatic.ceilingMat}
+            raycast={NO_RAYCAST}
+          />
+          <mesh geometry={ceilingStatic.coveGeo} material={ceilingStatic.coveMat} raycast={NO_RAYCAST} />
+        </>
+      )}
+
+      {/* White Parallel Ceiling Strip Lights Connecting All Four Golden Chandeliers */}
       <ArchitecturalParallelCeilingStripLights />
 
       {/* ==================== FOUR ARCHITECTURAL WALLS ==================== */}
-      {/* 1. North Wall (Back) — EXACT Signature Artwork from Reference Photo */}
       <ArchitecturalWall
         headingLine1="STAY"
         headingLine2="SIMPLE"
         headingLine3="STAY"
         headingLine4="TRUE"
-        position={[0, 0, -16]}
+        position={[0, 0, -ROOM_HALF_SIZE]}
         rotation={[0, 0, 0]}
+        showWallSpot={showUltraAccents}
+        showLampLight={showUltraAccents}
       />
-
-      {/* 2. South Wall (Front) */}
       <ArchitecturalWall
         headingLine1="THINK"
         headingLine2="BEYOND"
         headingLine3="THE"
         headingLine4="MOVE"
-        position={[0, 0, 16]}
+        position={[0, 0, ROOM_HALF_SIZE]}
         rotation={[0, Math.PI, 0]}
+        showWallSpot={showUltraAccents}
+        showLampLight={showUltraAccents}
       />
-
-      {/* 3. West Wall (Left) */}
       <ArchitecturalWall
         headingLine1="MASTER"
         headingLine2="PATIENCE"
         headingLine3="CONQUER"
         headingLine4="MIND"
-        position={[-16, 0, 0]}
+        position={[-ROOM_HALF_SIZE, 0, 0]}
         rotation={[0, Math.PI / 2, 0]}
+        showWallSpot={showUltraAccents}
+        showLampLight={showUltraAccents}
       />
-
-      {/* 4. East Wall (Right) */}
       <ArchitecturalWall
         headingLine1="SEE"
         headingLine2="DEEPER"
         headingLine3="PLAY"
         headingLine4="REGAL"
-        position={[16, 0, 0]}
+        position={[ROOM_HALF_SIZE, 0, 0]}
         rotation={[0, -Math.PI / 2, 0]}
+        showWallSpot={showUltraAccents}
+        showLampLight={showUltraAccents}
       />
 
-      {/* Reactive Interactive Floating Bulb in Room Center */}
-            {/* Center 2-tiered Geometric Chandelier above chessboard */}
-      <ArchitecturalChandelier />
+      {/* Lightweight Architectural Wall Mouldings Replacing the 8 Corner Paintings */}
+      <MinimalArchitecturalWallPanels />
 
-      {/* Four Golden Ring Chandeliers in the 4 Ceiling Corners of the room */}
-      {/* 1. North-West Corner */}
-      <CornerGoldRingChandelier position={[-10.5, 0, -10.5]} />
-      {/* 2. North-East Corner */}
-      <CornerGoldRingChandelier position={[10.5, 0, -10.5]} />
-      {/* 3. South-West Corner */}
-      <CornerGoldRingChandelier position={[-10.5, 0, 10.5]} />
-      {/* 4. South-East Corner */}
-      <CornerGoldRingChandelier position={[10.5, 0, 10.5]} />
-
-      {/* =====================================================================
-          TWO CORNER GALLERY ARTWORKS IN NORTH-WEST CORNER (Matching User Photos)
-          Directly in the corner shown in the user's screenshot:
-          - West Wall (Left side): Black metal cutout chess silhouettes
-          - North Wall (Right side): Vibrant King oil painting on colorful chessboard
-          ===================================================================== */}
-      {/* 1. West Wall (Left wall of corner in screenshot, facing +X) */}
-      <ChessMetalArtwork
-        position={[-15.86, 4.9, -10.6]}
-        rotation={[0, Math.PI / 2, 0]}
-        width={3.4}
-        height={2.7}
-      />
-
-      {/* 2. North Wall (Right wall of corner in screenshot, facing +Z) */}
-      <KingOilPaintingArtwork
-        position={[-10.6, 4.9, -15.86]}
-        rotation={[0, 0, 0]}
-        width={2.3}
-        height={3.18}
-      />
-
-      {/* =====================================================================
-          TWO CORNER GALLERY ARTWORKS IN DIAGONALLY OPPOSITE SOUTH-EAST CORNER
-          Diagonally opposite to NW corner, under the SE Corner Chandelier ([10.5, 0, 10.5])
-          - East Wall (facing -X): Dynamic Chess Pieces Watercolor & Splatter Art
-          - South Wall (facing -Z): Two Kings (White & Gold) Fine Art Oil Painting
-          ===================================================================== */}
-      {/* 1. East Wall (Left side when facing SE corner, facing -X) */}
-      <ChessSplatterArtwork
-        position={[15.86, 4.9, 10.6]}
-        rotation={[0, -Math.PI / 2, 0]}
-        width={2.8}
-        height={2.8}
-      />
-
-      {/* 2. South Wall (Right side when facing SE corner, facing -Z) */}
-      <TwoKingsArtwork
-        position={[10.6, 4.9, 15.86]}
-        rotation={[0, Math.PI, 0]}
-        width={2.45}
-        height={3.0}
-      />
-
-      {/* =====================================================================
-          TWO CORNER GALLERY ARTWORKS IN NORTH-EAST CORNER
-          The corner visible in the user's screenshot (blank walls meeting under chandelier).
-          - North Wall (facing +Z): King Oil Painting (colorful expressionist)
-          - East Wall (facing -X): Chess Metal Art (black silhouettes)
-          ===================================================================== */}
-      {/* 1. North Wall of NE corner (facing +Z) */}
-      <KingOilPaintingArtwork
-        position={[10.6, 4.9, -15.86]}
-        rotation={[0, 0, 0]}
-        width={2.3}
-        height={3.18}
-      />
-
-      {/* 2. East Wall of NE corner (facing -X) */}
-      <ChessMetalArtwork
-        position={[15.86, 4.9, -10.6]}
-        rotation={[0, -Math.PI / 2, 0]}
-        width={3.4}
-        height={2.7}
-      />
-
-      {/* =====================================================================
-          TWO CORNER GALLERY ARTWORKS IN SOUTH-WEST CORNER
-          Diagonally opposite to NE corner.
-          - South Wall (facing -Z): Two Kings Fine Art Oil Painting
-          - West Wall (facing +X): Chess Splatter Watercolor Art
-          ===================================================================== */}
-      {/* 1. South Wall of SW corner (facing -Z) */}
-      <TwoKingsArtwork
-        position={[-10.6, 4.9, 15.86]}
-        rotation={[0, Math.PI, 0]}
-        width={2.45}
-        height={3.0}
-      />
-
-      {/* 2. West Wall of SW corner (facing +X) */}
-      <ChessSplatterArtwork
-        position={[-15.86, 4.9, 10.6]}
-        rotation={[0, Math.PI / 2, 0]}
-        width={2.8}
-        height={2.8}
-      />
+      {/* Four Golden Ring Chandeliers Preserved in All 4 Corners */}
+      <CornerGoldRingChandelier position={[-CORNER_CHANDELIER_OFFSET, 0, -CORNER_CHANDELIER_OFFSET]} showLight={showCornerLights} />
+      <CornerGoldRingChandelier position={[CORNER_CHANDELIER_OFFSET, 0, -CORNER_CHANDELIER_OFFSET]} showLight={showCornerLights} />
+      <CornerGoldRingChandelier position={[-CORNER_CHANDELIER_OFFSET, 0, CORNER_CHANDELIER_OFFSET]} showLight={showCornerLights} />
+      <CornerGoldRingChandelier position={[CORNER_CHANDELIER_OFFSET, 0, CORNER_CHANDELIER_OFFSET]} showLight={showCornerLights} />
     </group>
   );
 };

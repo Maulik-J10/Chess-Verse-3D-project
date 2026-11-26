@@ -5,13 +5,20 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
 import { CameraPreset } from '../chess/types';
+import { ROOM_HEIGHT } from './RoomEnvironment';
 
-// Preset Camera Coordinates calibrated for Grand Chess Room (Desktop baseline)
 declare global {
   interface Window {
     __lastPinchEndTime?: number;
   }
 }
+
+// Strict safe inner room envelope so camera can NEVER exit walls, pass above ceiling/strip lights,
+// or hit corner chandeliers/credenzas (walls at +-18m, chandeliers at +-12.8m, strip lights at 14.54m).
+const SAFE_MAX_WALL_COORD = 15.8;
+const SAFE_MAX_HORIZ_RADIUS = 15.6;
+const SAFE_MAX_Y = ROOM_HEIGHT - 0.85; // 13.75m (strictly below 14.54m strip lights!)
+const SAFE_MIN_Y = 1.55;
 
 const PRESET_CONFIGS: Record<
   CameraPreset,
@@ -19,29 +26,32 @@ const PRESET_CONFIGS: Record<
 > = {
   front: {
     pos: [0, 4.25, 7.6],
-    target: [0, 2.05, 0],
+    target: [0, 2.0, 0],
   },
   top: {
-    pos: [0, 7.3, 0.2],
+    pos: [0, 11.45, 0.25], // Fits entire 9.68m board + borders cleanly on desktop & below 14.54m ceiling
     target: [0, 1.35, 0],
   },
   white: {
     pos: [0, 3.95, 6.9],
-    target: [0, 2.05, 0],
+    target: [0, 2.0, 0],
   },
   black: {
     pos: [0, 3.95, -6.9],
-    target: [0, 2.05, 0],
+    target: [0, 2.0, 0],
   },
   cinematic: {
-    pos: [7.0, 4.0, 7.0],
-    target: [0, 1.9, 0],
+    pos: [7.2, 4.2, 7.2],
+    target: [0, 1.85, 0],
   },
   free: {
     pos: [4.6, 4.2, 6.6],
-    target: [0, 2.0, 0],
+    target: [0, 1.9, 0],
   },
 };
+
+// Reusable scratch vector to eliminate per-frame allocations inside useFrame
+const _offsetVec = new THREE.Vector3();
 
 export const CameraController: React.FC = () => {
   const controlsRef = useRef<OrbitControlsImpl>(null);
@@ -52,55 +62,59 @@ export const CameraController: React.FC = () => {
   const isFlipped = useGameStore((s) => s.isFlipped);
   const isMobile = useGameStore((s) => s.isMobile);
 
-  // Dynamic aspect ratio calculation
   const aspect = size.width / Math.max(size.height, 1);
   const isPortrait = aspect < 1.0;
 
-  // Adapt camera FOV on portrait / narrow screens so horizontal field of view doesn't collapse
-  // Desktop/laptop (aspect >= 1.0) stays strictly at 56° (desktop baseline unchanged)
+  // Hor+ FOV scaling: desktop/landscape (>= 1.0) stays strictly at 56 deg;
+  // portrait viewports smoothly widen vertical FOV so horizontal span fits all 64 squares & borders cleanly.
+  const targetFov = useMemo(() => {
+    if (!isPortrait) return 56;
+    const desiredTanHalfH = 0.415; // Preserves ~45 deg horizontal FOV across skinny phones
+    const computedFov = (2 * Math.atan(desiredTanHalfH / Math.max(aspect, 0.42)) * 180) / Math.PI;
+    return Math.min(85, Math.max(56, computedFov));
+  }, [isPortrait, aspect]);
+
   useEffect(() => {
     const pCam = camera as THREE.PerspectiveCamera;
     if (!pCam.isPerspectiveCamera) return;
 
-    const targetFov = aspect < 1.0
-      ? Math.min(68, Math.max(56, 56 + (1.0 - aspect) * 20))
-      : 56;
-
+    let changed = false;
     if (Math.abs(pCam.fov - targetFov) > 0.1) {
       pCam.fov = targetFov;
+      changed = true;
+    }
+    if (pCam.near !== 0.25 || pCam.far !== 85) {
+      pCam.near = 0.25;
+      pCam.far = 85;
+      changed = true;
+    }
+    if (changed) {
       pCam.updateProjectionMatrix();
     }
-  }, [camera, aspect]);
+  }, [camera, targetFov]);
 
-  // Responsive distance multiplier so all 64 squares fit inside narrower mobile/tablet viewports
-  // On desktop/laptop (aspect >= 1.0), distanceFactor is strictly 1.0, preserving desktop visuals
+  // Distance multiplier for preset framing on portrait viewports
   const distanceFactor = useMemo(() => {
     if (!isPortrait) return 1.0;
-    return Math.min(1.65, Math.max(1.1, 0.88 / Math.max(aspect, 0.45)));
+    return Math.min(1.52, Math.max(1.08, 0.72 / Math.max(aspect, 0.45)));
   }, [isPortrait, aspect]);
 
-  // Dynamic maximum distance: ensures the ENTIRE chessboard, outer gold perimeter lip,
-  // bevels, and surrounding table remain 100% visible without ANY edge cropping at max zoom-out
-  const dynamicMaxDistance = useMemo(() => {
+  // Max orbit distance calibrated to show full 4-corner board diagonal (~13.68m) while fitting inside room
+  const desiredMaxDistance = useMemo(() => {
     if (!isPortrait) return 15.0; // Desktop baseline
-    const pCam = camera as THREE.PerspectiveCamera;
-    const fovRad = ((pCam.fov || 56) * Math.PI) / 180;
-    const tanH = Math.tan(fovRad / 2) * aspect;
-    // Board outer diagonal is ~13m; require visible horizontal half-span >= 6.4m
-    const requiredDistance = 6.4 / Math.max(tanH, 0.22);
-    return Math.min(19.5, Math.max(15.5, requiredDistance));
-  }, [isPortrait, aspect, camera]);
+    const tanHalfH = Math.tan(((targetFov * Math.PI) / 180) * 0.5) * aspect;
+    const diagFitDist = 6.95 / Math.max(tanHalfH, 0.34);
+    return Math.min(17.4, Math.max(15.2, diagFitDist));
+  }, [isPortrait, aspect, targetFov]);
 
-  // Target positions for smooth lerping
-  const targetPosRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 4.3, 7.8));
-  const targetLookRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 1.8, 0));
+  const targetPosRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 4.25, 7.6));
+  const targetLookRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 1.85, 0));
   const isTransitioningRef = useRef(false);
+  const cinematicClockRef = useRef(0);
 
-  // Track previous preset and flipped state to ONLY trigger transitions on intentional changes
   const prevPresetRef = useRef<CameraPreset>(cameraPreset);
   const prevFlippedRef = useRef<boolean>(isFlipped);
 
-  // Function to compute camera coordinates for a preset
   const getPresetCoords = useCallback(
     (preset: CameraPreset, flipped: boolean) => {
       let cfg = PRESET_CONFIGS[preset] || PRESET_CONFIGS.front;
@@ -114,27 +128,40 @@ export const CameraController: React.FC = () => {
       const target = new THREE.Vector3(cfg.target[0], cfg.target[1], cfg.target[2]);
 
       if (preset === 'top') {
-        pos.y *= distanceFactor;
+        // Compute safe top-down elevation below strip lights that fits entire 9.68m board + borders
+        if (isPortrait) {
+          const tanHalfH = Math.tan(((targetFov * Math.PI) / 180) * 0.5) * aspect;
+          const neededHeight = 5.05 / Math.max(tanHalfH, 0.34);
+          pos.y = Math.min(SAFE_MAX_Y - 0.1, 1.35 + neededHeight);
+        } else {
+          pos.y = Math.min(SAFE_MAX_Y - 0.1, 11.45);
+        }
+        pos.z = 0.25;
       } else if (preset === 'cinematic') {
         if (isPortrait) {
-          pos.x *= 1.3;
-          pos.y *= 1.2;
-          pos.z *= 1.3;
+          pos.x *= 1.25;
+          pos.y *= 1.15;
+          pos.z *= 1.25;
         }
       } else if (preset !== 'free') {
         if (isPortrait) {
-          pos.y *= 1.08 * distanceFactor;
+          pos.y *= 1.05 * distanceFactor;
           pos.z *= distanceFactor;
-          target.y *= 0.95;
+          target.y = 1.75;
         }
       }
 
+      // Clamp preset endpoint strictly inside room safety bounds
+      pos.x = THREE.MathUtils.clamp(pos.x, -SAFE_MAX_WALL_COORD, SAFE_MAX_WALL_COORD);
+      pos.z = THREE.MathUtils.clamp(pos.z, -SAFE_MAX_WALL_COORD, SAFE_MAX_WALL_COORD);
+      pos.y = THREE.MathUtils.clamp(pos.y, SAFE_MIN_Y, SAFE_MAX_Y);
+
       return { pos, target };
     },
-    [distanceFactor, isPortrait]
+    [distanceFactor, isPortrait, aspect, targetFov]
   );
 
-  // Initiate transition ONLY when preset or flipped changes explicitly
+  // Trigger smooth camera transition on intentional preset/flip changes
   useEffect(() => {
     const presetChanged = prevPresetRef.current !== cameraPreset;
     const flippedChanged = prevFlippedRef.current !== isFlipped;
@@ -142,7 +169,6 @@ export const CameraController: React.FC = () => {
     prevPresetRef.current = cameraPreset;
     prevFlippedRef.current = isFlipped;
 
-    // Do NOT auto-transition if preset is 'free' (user is in manual orbit mode)
     if (cameraPreset === 'free') {
       isTransitioningRef.current = false;
       return;
@@ -156,9 +182,21 @@ export const CameraController: React.FC = () => {
     }
   }, [cameraPreset, isFlipped, getPresetCoords]);
 
-  // Connect to OrbitControls start event:
-  // As soon as the user touches/drags with fingers or mouse, immediately cancel any
-  // programmatic transition and switch to 'free' mode so controls never fight the user!
+  // Adjust initial camera framing on first portrait mount cleanly without fighting user later
+  useEffect(() => {
+    if (isPortrait && cameraPreset === 'front') {
+      const { pos, target } = getPresetCoords('front', isFlipped);
+      camera.position.copy(pos);
+      if (controlsRef.current) {
+        controlsRef.current.target.copy(target);
+        controlsRef.current.update();
+      }
+    }
+    // Intentionally run once on mount for portrait initial framing
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Cancel preset transition immediately when user interacts with touch or mouse
   useEffect(() => {
     const controls = controlsRef.current;
     if (!controls) return;
@@ -176,7 +214,7 @@ export const CameraController: React.FC = () => {
     };
   }, [setCameraPreset]);
 
-  // Global pinch-gesture tracking to completely eliminate accidental piece selection during or right after pinch zoom
+  // Multi-touch pinch detection: prevents accidental piece selection during/right after two-finger pinch zoom
   useEffect(() => {
     let activeTouches = 0;
     const handleTouchStart = (e: TouchEvent) => {
@@ -210,40 +248,67 @@ export const CameraController: React.FC = () => {
     };
   }, []);
 
-  useFrame((state, delta) => {
+  useFrame((_, delta) => {
     const controls = controlsRef.current;
     if (!controls) return;
 
-    // Cinematic continuous slow panoramic sweep around the gallery
+    // 1. Cinematic gallery sweep mode (uses local delta accumulator, zero Clock side-effects)
     if (cameraPreset === 'cinematic') {
-      const t = state.clock.getElapsedTime() * 0.12;
-      const radius = 8.5 * (isPortrait ? 1.25 : 1.0);
-      const height = (4.2 + Math.sin(t * 0.5) * 0.5) * (isPortrait ? 1.2 : 1.0);
-      camera.position.x = Math.sin(t) * radius;
-      camera.position.z = Math.cos(t) * radius;
-      camera.position.y = height;
+      cinematicClockRef.current += delta;
+      const t = cinematicClockRef.current * 0.12;
+      const radius = isPortrait ? 10.2 : 8.5;
+      const height = (isPortrait ? 5.2 : 4.2) + Math.sin(t * 0.5) * 0.45;
+      camera.position.set(Math.sin(t) * radius, Math.min(SAFE_MAX_Y, height), Math.cos(t) * radius);
       controls.target.set(0, 1.8, 0);
       controls.update();
       return;
     }
 
-    // Smooth lerp transition to programmatic preset
+    // 2. Smooth lerp transition toward active preset
     if (isTransitioningRef.current) {
-      camera.position.lerp(targetPosRef.current, delta * 4.5);
-      controls.target.lerp(targetLookRef.current, delta * 4.5);
+      const alpha = Math.min(1, delta * 5.0);
+      camera.position.lerp(targetPosRef.current, alpha);
+      controls.target.lerp(targetLookRef.current, alpha);
 
       if (camera.position.distanceTo(targetPosRef.current) < 0.05) {
         camera.position.copy(targetPosRef.current);
         controls.target.copy(targetLookRef.current);
         isTransitioningRef.current = false;
       }
+    } else {
+      // Anchor target firmly to chessboard center (slightly lower in steep overhead angles)
+      const targetY = cameraPreset === 'top' ? 1.35 : 1.78;
+      controls.target.set(0, targetY, 0);
     }
 
-    // Lock camera target directly on board center so orbit always rotates around the chessboard
-    controls.target.set(0, 1.8, 0);
+    // 3. Directional Room-Box + Ceiling + Chandelier Envelope Clamping:
+    // Computes exact safe radial maxDistance along the camera's current sight ray
+    // so OrbitControls NEVER lets the user escape walls or pass above strip lights!
+    _offsetVec.subVectors(camera.position, controls.target);
+    const len = _offsetVec.length();
+    if (len > 0.001) {
+      const dirX = _offsetVec.x / len;
+      const dirY = _offsetVec.y / len;
+      const dirZ = _offsetVec.z / len;
+      const horizDir = Math.hypot(dirX, dirZ);
 
-    // Update controls for silky smooth damping
+      const maxD_ceil = dirY > 0.01 ? (SAFE_MAX_Y - controls.target.y) / dirY : 999;
+      const maxD_horiz = horizDir > 0.01 ? SAFE_MAX_HORIZ_RADIUS / horizDir : 999;
+      const maxD_x = Math.abs(dirX) > 0.01 ? SAFE_MAX_WALL_COORD / Math.abs(dirX) : 999;
+      const maxD_z = Math.abs(dirZ) > 0.01 ? SAFE_MAX_WALL_COORD / Math.abs(dirZ) : 999;
+
+      const roomSafeMax = Math.max(3.5, Math.min(desiredMaxDistance, maxD_ceil, maxD_horiz, maxD_x, maxD_z));
+      controls.maxDistance = roomSafeMax;
+    }
+
+    // 4. Update OrbitControls damping
     controls.update();
+
+    // 5. Final hard defensive clamp inside closed gallery interior (prevents burst pinch/scroll escapes)
+    if (camera.position.y > SAFE_MAX_Y) camera.position.y = SAFE_MAX_Y;
+    if (camera.position.y < SAFE_MIN_Y) camera.position.y = SAFE_MIN_Y;
+    camera.position.x = THREE.MathUtils.clamp(camera.position.x, -SAFE_MAX_WALL_COORD, SAFE_MAX_WALL_COORD);
+    camera.position.z = THREE.MathUtils.clamp(camera.position.z, -SAFE_MAX_WALL_COORD, SAFE_MAX_WALL_COORD);
   });
 
   return (
@@ -251,19 +316,19 @@ export const CameraController: React.FC = () => {
       ref={controlsRef}
       makeDefault
       enableDamping
-      dampingFactor={0.06}
-      minDistance={2.6} // Close inspection of pieces without clipping
-      maxDistance={dynamicMaxDistance} // Calibrated so all 64 squares & board frame are 100% visible at max zoom-out
-      minPolarAngle={0.06} // Almost straight down top view (no flip)
-      maxPolarAngle={1.52} // Low table angle, stops safely at tabletop/floor level
+      dampingFactor={0.07}
+      minDistance={2.8} // Close inspection of carved pieces without clipping geometry
+      maxDistance={desiredMaxDistance}
+      minPolarAngle={0.05} // Top-down view cleanly unobstructed
+      maxPolarAngle={1.50} // Low tabletop angle, stops safely above floor
       enableRotate={true}
       rotateSpeed={isMobile ? 0.72 : 0.8}
       enableZoom={true}
-      zoomSpeed={isMobile ? 0.75 : 0.8} // Silky smooth calibrated pinch zoom without jumps
-      enablePan={false} // Disable panning so two-finger pinch zoom is pure, centered, with zero drift or jitter
+      zoomSpeed={isMobile ? 0.75 : 0.8} // Smooth calibrated pinch zoom without jumps
+      enablePan={false} // Pure centered dolly pinch zoom with zero drift or target wandering
       touches={{
-        ONE: THREE.TOUCH.ROTATE, // 1 finger = 360° orbit
-        TWO: THREE.TOUCH.DOLLY_PAN, // 2 fingers = pure pinch zoom
+        ONE: THREE.TOUCH.ROTATE,
+        TWO: THREE.TOUCH.DOLLY_PAN,
       }}
     />
   );

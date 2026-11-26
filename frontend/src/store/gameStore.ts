@@ -16,6 +16,7 @@ import { ChessLogicController } from '../chess/chessLogic';
 import { stockfishEngine } from '../chess/stockfishEngine';
 import { soundManager } from '../audio/soundManager';
 import { socketClient } from '../multiplayer/socketClient';
+import { detectDeviceCapabilities } from '../utils/deviceTier';
 
 interface GameState {
   // Mode & Position
@@ -119,14 +120,10 @@ interface GameState {
 const chessController = new ChessLogicController();
 
 export const checkIsMobile = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  return (
-    window.innerWidth <= 768 ||
-    (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0 && window.innerWidth <= 1024) ||
-    window.matchMedia('(pointer: coarse)').matches ||
-    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-  );
+  return detectDeviceCapabilities().isMobileViewport;
 };
+
+const initialDeviceProfile = detectDeviceCapabilities();
 
 export const useGameStore = create<GameState>((set, get) => {
   // Listen for engine moves in AI mode
@@ -174,9 +171,9 @@ export const useGameStore = create<GameState>((set, get) => {
     soundEnabled: true,
     showHints: true,
     showLegalMoves: true,
-    graphicsQuality: checkIsMobile() ? 'medium' : 'high',
+    graphicsQuality: initialDeviceProfile.recommendedQuality,
     showPerfOverlay: false,
-    isMobile: checkIsMobile(),
+    isMobile: initialDeviceProfile.isMobileViewport,
     isMoveHistoryOpen: false,
     isCameraDrawerOpen: false,
 
@@ -718,6 +715,7 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     resetGame: () => {
+      stockfishEngine.stop();
       chessController.reset();
       const state = get();
       const initialMs = state.timeControl.minutes * 60 * 1000;
@@ -747,11 +745,13 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     returnToMenu: () => {
+      stockfishEngine.stop();
       socketClient.disconnect();
       set({
         gameMode: 'menu',
         selectedSquare: null,
         legalMoves: [],
+        isThinking: false,
         gameResult: null,
         multiplayer: {},
       });

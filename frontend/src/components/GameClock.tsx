@@ -5,33 +5,35 @@ import { PieceColor } from '../chess/types';
 
 interface GameClockProps {
   color: PieceColor;
-  timeMs: number;
   isActive: boolean;
   playerName: string;
 }
 
 export const GameClock: React.FC<GameClockProps> = ({
   color,
-  timeMs,
   isActive,
   playerName,
 }) => {
+  // Isolate time subscription directly inside GameClock so ticking NEVER re-renders the whole GameHUD!
+  const timeMs = useGameStore((s) => (color === 'w' ? s.whiteTimeMs : s.blackTimeMs));
   const tickClock = useGameStore((s) => s.tickClock);
   const isClockRunning = useGameStore((s) => s.isClockRunning);
   const timeControl = useGameStore((s) => s.timeControl);
 
-  // Periodic ticker for active clock
+  const isUnderTenSec = timeControl.minutes > 0 && timeMs <= 10500;
+
+  // Periodic ticker for active clock (250ms normally -> 4x fewer updates; 100ms under 10s for crisp tenths)
   useEffect(() => {
     if (!isActive || !isClockRunning || timeControl.minutes === 0) return;
 
+    const intervalMs = isUnderTenSec ? 100 : 250;
     const interval = setInterval(() => {
-      tickClock(100);
-    }, 100);
+      tickClock(intervalMs);
+    }, intervalMs);
 
     return () => clearInterval(interval);
-  }, [isActive, isClockRunning, timeControl.minutes, tickClock]);
+  }, [isActive, isClockRunning, timeControl.minutes, isUnderTenSec, tickClock]);
 
-  // Format time mm:ss or mm:ss.s for low times
   const formatTime = (ms: number): string => {
     if (timeControl.minutes === 0) return '∞';
     const totalSecs = Math.max(0, Math.floor(ms / 1000));
@@ -63,9 +65,11 @@ export const GameClock: React.FC<GameClockProps> = ({
           }`}
         />
         <div className="flex flex-col">
-          <span className="text-xs font-serif font-bold text-[#202226] truncate max-w-[110px]">
-            {playerName}
-          </span>
+          {playerName && (
+            <span className="text-xs font-serif font-bold text-[#202226] truncate max-w-[110px]">
+              {playerName}
+            </span>
+          )}
           <span className="text-[10px] text-[#666762] uppercase tracking-wider font-semibold">
             {color === 'w' ? 'White' : 'Black'}
           </span>

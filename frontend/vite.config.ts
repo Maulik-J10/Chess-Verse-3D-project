@@ -13,5 +13,16 @@ export default defineConfig({
   worker: {
     format: 'es',
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'zustand'],
+          'vendor-three': ['three'],
+          'vendor-r3f': ['@react-three/fiber', '@react-three/drei'],
+          'vendor-chess': ['chess.js', 'socket.io-client', 'lucide-react'],
+        },
+      },
+    },
+  },
 });
-

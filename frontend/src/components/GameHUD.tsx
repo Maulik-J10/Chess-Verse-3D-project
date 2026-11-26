@@ -43,8 +43,6 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
   const turn = useGameStore((s) => s.turn);
   const playerColor = useGameStore((s) => s.playerColor);
   const opponentName = useGameStore((s) => s.opponentName);
-  const whiteTimeMs = useGameStore((s) => s.whiteTimeMs);
-  const blackTimeMs = useGameStore((s) => s.blackTimeMs);
   const isThinking = useGameStore((s) => s.isThinking);
   const difficulty = useGameStore((s) => s.difficulty);
   const capturedWhite = useGameStore((s) => s.capturedWhite);
@@ -197,36 +195,36 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
       {/* ============================================================== */}
       <div className="pointer-events-auto flex lg:hidden flex-col gap-1.5 w-full">
         {/* Navigation & Controls Row */}
-        <div className="flex items-center justify-between gap-1.5 bg-[#f7f7f4]/95 backdrop-blur-md px-2.5 py-1.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
+        <div className="flex items-center justify-between gap-1 bg-[#f7f7f4]/95 backdrop-blur-md px-2 sm:px-3 py-1.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
           <button
             onClick={returnToMenu}
-            className="flex items-center gap-1 text-xs text-[#202226] font-serif font-bold p-1 cursor-pointer"
+            className="flex items-center gap-1 text-xs text-[#202226] font-serif font-bold p-1 cursor-pointer shrink-0"
             title="Return to Menu"
           >
             <Home className="w-4 h-4 text-[#c6a45c]" />
-            <span className="text-[11px] tracking-wide">MENU</span>
+            <span className="hidden min-[380px]:inline text-[11px] tracking-wide">MENU</span>
           </button>
 
           {/* Turn indicator */}
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/90 border border-[#c6a45c]/30 text-[10px] sm:text-[11px] font-serif font-bold">
+          <div className="flex items-center gap-1 px-2 py-0.5 sm:py-1 rounded-full bg-white/90 border border-[#c6a45c]/30 text-[10px] sm:text-[11px] font-serif font-bold whitespace-nowrap">
             <span
-              className={`w-2 h-2 rounded-full ${
+              className={`w-2 h-2 rounded-full shrink-0 ${
                 turn === 'w' ? 'bg-white border border-[#999]' : 'bg-[#202226]'
               }`}
             />
             <span className={isMyTurn ? 'text-[#c6a45c]' : 'text-[#666762]'}>
-              {isThinking ? 'AI Thinking...' : isMyTurn ? 'Your Turn' : "Enemy's Turn"}
+              {isThinking ? 'Thinking...' : isMyTurn ? 'Your Turn' : 'AI Turn'}
             </span>
           </div>
 
           {/* Quick Action Icons with 1-tap Camera Reset, Rules & Settings */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 min-[360px]:gap-1 shrink-0">
             <button
               onClick={() => {
                 setCameraPreset('front');
                 soundManager.playClick();
               }}
-              className="p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
+              className="p-1 min-[360px]:p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer h-8 w-8 min-[380px]:h-9 min-[380px]:w-9 flex items-center justify-center"
               title="Reset Camera to Front View"
             >
               <RotateCcw className="w-3.5 h-3.5 text-[#c6a45c]" />
@@ -234,7 +232,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
 
             <button
               onClick={() => setShowMobileCamera(true)}
-              className="p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
+              className="p-1 min-[360px]:p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer h-8 w-8 min-[380px]:h-9 min-[380px]:w-9 flex items-center justify-center"
               title="Camera View Options"
             >
               <Camera className="w-3.5 h-3.5 text-[#c6a45c]" />
@@ -245,7 +243,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
                 soundManager.playClick();
                 onOpenHowToPlay();
               }}
-              className="p-1.5 rounded-lg bg-white border border-[#c6a45c]/40 text-[#202226] active:scale-95 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
+              className="p-1 min-[360px]:p-1.5 rounded-lg bg-white border border-[#c6a45c]/40 text-[#202226] active:scale-95 cursor-pointer h-8 w-8 min-[380px]:h-9 min-[380px]:w-9 flex items-center justify-center"
               title="Rules & How to Play"
             >
               <BookOpen className="w-3.5 h-3.5 text-[#c6a45c]" />
@@ -253,7 +251,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
 
             <button
               onClick={toggleSound}
-              className="p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
+              className="p-1 min-[360px]:p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer h-8 w-8 min-[380px]:h-9 min-[380px]:w-9 flex items-center justify-center"
               title={soundEnabled ? 'Mute' : 'Unmute'}
             >
               {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-[#c6a45c]" /> : <VolumeX className="w-3.5 h-3.5 text-[#a7a8a5]" />}
@@ -264,7 +262,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
                 soundManager.playClick();
                 onOpenSettings();
               }}
-              className="p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
+              className="p-1 min-[360px]:p-1.5 rounded-lg bg-white border border-[#d6d6d2] text-[#202226] active:scale-95 cursor-pointer h-8 w-8 min-[380px]:h-9 min-[380px]:w-9 flex items-center justify-center"
               title="Settings & Graphics"
             >
               <SettingsIcon className="w-3.5 h-3.5 text-[#666762]" />
@@ -294,7 +292,6 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
           <div className="shrink-0 scale-90 origin-right">
             <GameClock
               color={playerColor === 'w' ? 'b' : 'w'}
-              timeMs={playerColor === 'w' ? blackTimeMs : whiteTimeMs}
               isActive={turn !== playerColor}
               playerName=""
             />
@@ -312,7 +309,6 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
           <div className="bg-[#f7f7f4]/95 backdrop-blur-md border border-[#c6a45c]/35 rounded-2xl p-3 shadow-royal-card">
             <GameClock
               color={playerColor === 'w' ? 'b' : 'w'}
-              timeMs={playerColor === 'w' ? blackTimeMs : whiteTimeMs}
               isActive={turn !== playerColor}
               playerName={opponentName}
             />
@@ -328,7 +324,6 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
           <div className="bg-[#f7f7f4]/95 backdrop-blur-md border border-[#c6a45c]/35 rounded-2xl p-3 shadow-royal-card">
             <GameClock
               color={playerColor}
-              timeMs={playerColor === 'w' ? whiteTimeMs : blackTimeMs}
               isActive={turn === playerColor}
               playerName="You"
             />
@@ -472,7 +467,6 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
           <div className="shrink-0 scale-90 origin-right">
             <GameClock
               color={playerColor}
-              timeMs={playerColor === 'w' ? whiteTimeMs : blackTimeMs}
               isActive={turn === playerColor}
               playerName=""
             />
@@ -531,7 +525,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
       {/* MOBILE CAMERA VIEWS DRAWER */}
       {/* ============================================================== */}
       {showMobileCamera && (
-        <div className="pointer-events-auto fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-3 pb-[max(1rem,env(safe-area-inset-bottom))] animate-fade-in">
+        <div className="pointer-events-auto lg:hidden fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-3 pb-[max(1rem,env(safe-area-inset-bottom))] animate-fade-in">
           <div className="w-full max-w-sm bg-[#f7f7f4] border border-[#c6a45c]/50 rounded-3xl p-5 shadow-2xl text-[#202226]">
             <div className="flex items-center justify-between pb-3 border-b border-[#c6a45c]/20 mb-3">
               <div className="flex items-center gap-1.5 font-serif font-bold text-sm text-[#202226]">
@@ -613,7 +607,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
       {/* MOBILE MOVE HISTORY DRAWER */}
       {/* ============================================================== */}
       {showMobileHistory && (
-        <div className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+        <div className="pointer-events-auto lg:hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
           <div className="w-full max-w-sm bg-[#f7f7f4] border border-[#c6a45c]/50 rounded-3xl p-5 shadow-2xl text-[#202226] max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between pb-3 border-b border-[#c6a45c]/20 mb-3">
               <div className="flex items-center gap-1.5 font-serif font-bold text-sm text-[#202226]">
