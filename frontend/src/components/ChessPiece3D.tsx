@@ -1,12 +1,7 @@
 import React, { useRef, useMemo, useState, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import {
-  DEFAULT_BLACK_PIECE_SHADE,
-  PieceColor,
-  PieceType,
-  getBlackPieceShadeOption,
-} from '../chess/types';
+import { PieceColor, PieceType } from '../chess/types';
 import { useGameStore } from '../store/gameStore';
 import { mergeTransformedParts, NO_RAYCAST } from '../utils/geometryUtils';
 import { detectDeviceCapabilities } from '../utils/deviceTier';
@@ -81,17 +76,15 @@ const createWoodDiffuseMap = (isWhite: boolean, res: number): THREE.CanvasTextur
       ctx.fillRect(rand() * 1024, rand() * 1024, 1.6, 3.8);
     }
   } else {
-    // Neutral light wood-grain map so MeshStandardMaterial.color tints black pieces cleanly
-    // across all selectable lighter charcoal / walnut / graphite shades without muddying fibers.
     const bgGrad = ctx.createLinearGradient(0, 0, 1024, 1024);
-    bgGrad.addColorStop(0, '#efefef');
-    bgGrad.addColorStop(0.35, '#e7e7ec');
-    bgGrad.addColorStop(0.7, '#dfdfe6');
-    bgGrad.addColorStop(1, '#eaeaf0');
+    bgGrad.addColorStop(0, '#131313');
+    bgGrad.addColorStop(0.35, '#161616');
+    bgGrad.addColorStop(0.7, '#1a1a1a');
+    bgGrad.addColorStop(1, '#141414');
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, 1024, 1024);
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.025)';
     for (let r = 0; r < 6; r++) {
       ctx.beginPath();
       ctx.ellipse(512, r * 190 + 50, 600, 140, 0, 0, Math.PI * 2);
@@ -110,15 +103,15 @@ const createWoodDiffuseMap = (isWhite: boolean, res: number): THREE.CanvasTextur
         x + (rand() - 0.5) * 14, 1024
       );
     }
-    ctx.strokeStyle = 'rgba(36, 36, 42, 0.22)';
+    ctx.strokeStyle = 'rgba(4, 4, 4, 0.24)';
     ctx.lineWidth = 1.8;
     ctx.stroke(darkFibers);
 
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+    ctx.strokeStyle = 'rgba(60, 60, 60, 0.18)';
     ctx.lineWidth = 2.0;
     ctx.stroke(lightFibers);
 
-    ctx.fillStyle = 'rgba(28, 28, 34, 0.24)';
+    ctx.fillStyle = 'rgba(3, 3, 3, 0.35)';
     for (let p = 0; p < 150; p++) {
       ctx.fillRect(rand() * 1024, rand() * 1024, 1.6, 3.8);
     }
@@ -253,12 +246,10 @@ function getPieceMaterials(): PieceMaterials | null {
     metalness: 0.0,
   });
 
-  const initialBlackHex = getBlackPieceShadeOption(useGameStore.getState().blackPieceShade).hex;
-
   const blackFast = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(initialBlackHex),
+    color: new THREE.Color('#ffffff'),
     map: blackMap || undefined,
-    roughness: 0.56,
+    roughness: 0.58,
     metalness: 0.0,
   });
 
@@ -295,17 +286,7 @@ function getPieceMaterials(): PieceMaterials | null {
   return cachedPieceMaterials;
 }
 
-function getPieceWoodMaterial(
-  mats: PieceMaterials,
-  color: PieceColor,
-  useDetailedWood: boolean,
-  blackShadeHex: string
-): THREE.MeshStandardMaterial {
-  if (color === 'b') {
-    if (!mats.blackFast.color.getHexString || `#${mats.blackFast.color.getHexString()}` !== blackShadeHex.toLowerCase()) {
-      mats.blackFast.color.set(blackShadeHex);
-    }
-  }
+function getPieceWoodMaterial(mats: PieceMaterials, color: PieceColor, useDetailedWood: boolean): THREE.MeshStandardMaterial {
   if (!useDetailedWood) {
     return color === 'w' ? mats.whiteFast : mats.blackFast;
   }
@@ -322,17 +303,14 @@ function getPieceWoodMaterial(
       metalness: 0.0,
     });
     mats.blackFull = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(blackShadeHex),
+      color: new THREE.Color('#ffffff'),
       map: mats.blackMap || undefined,
       bumpMap: bumpMap || undefined,
       bumpScale: 0.012,
       roughnessMap: roughMap || undefined,
-      roughness: 0.56,
+      roughness: 0.58,
       metalness: 0.0,
     });
-  }
-  if (color === 'b' && `#${mats.blackFull.color.getHexString()}` !== blackShadeHex.toLowerCase()) {
-    mats.blackFull.color.set(blackShadeHex);
   }
   return color === 'w' ? mats.whiteFull : mats.blackFull;
 }
@@ -938,7 +916,6 @@ export const ChessPiece3D: React.FC<ChessPiece3DProps> = React.memo(({ type, col
   const selectSquare = useGameStore((s) => s.selectSquare);
   const graphicsQuality = useGameStore((s) => s.graphicsQuality);
   const isMobile = useGameStore((s) => s.isMobile);
-  const blackPieceShade = useGameStore((s) => (color === 'b' ? s.blackPieceShade : DEFAULT_BLACK_PIECE_SHADE));
 
   const mats = getPieceMaterials();
   const geos = getPieceMergedGeos();
@@ -950,10 +927,10 @@ export const ChessPiece3D: React.FC<ChessPiece3DProps> = React.memo(({ type, col
     if (isMobile && hovered) setHovered(false);
   }, [isMobile, hovered]);
 
-  // Wake demand renderer cleanly when piece state, location, selection, hover, quality, or shade changes
+  // Wake demand renderer cleanly when piece state, location, selection, hover, or quality changes
   useEffect(() => {
     invalidate();
-  }, [invalidate, targetX, targetZ, isSelected, hovered, graphicsQuality, blackPieceShade]);
+  }, [invalidate, targetX, targetZ, isSelected, hovered, graphicsQuality]);
 
   // Early-exit animation damping + automatic demand-loop wakeups until piece settles
   useFrame((_, delta) => {
@@ -1013,8 +990,7 @@ export const ChessPiece3D: React.FC<ChessPiece3DProps> = React.memo(({ type, col
 
   const pieceGeo = geos[type];
   const useDetailedWood = graphicsQuality === 'high' || graphicsQuality === 'ultra';
-  const blackHex = getBlackPieceShadeOption(blackPieceShade).hex;
-  const woodMat = getPieceWoodMaterial(mats, color, useDetailedWood, blackHex);
+  const woodMat = getPieceWoodMaterial(mats, color, useDetailedWood);
   const castShadow = graphicsQuality !== 'low';
   const receiveShadow = graphicsQuality !== 'low';
 
