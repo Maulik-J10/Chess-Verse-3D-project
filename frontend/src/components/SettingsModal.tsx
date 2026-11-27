@@ -2,6 +2,7 @@ import React from 'react';
 import { useGameStore } from '../store/gameStore';
 import { GraphicsQuality } from '../chess/types';
 import { soundManager } from '../audio/soundManager';
+import { BlackShadeTray } from './BlackShadeTray';
 import { 
   Settings, 
   Volume2, 
@@ -87,6 +88,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               ))}
             </div>
           </div>
+
+          {/* Black Piece Shade Color Tray (Lighter Charcoal / Wood Tones) */}
+          <BlackShadeTray variant="settings" />
 
           {/* Sound & Audio */}
           <div className="flex items-center justify-between p-3 rounded-2xl bg-white border border-[#d6d6d2]">

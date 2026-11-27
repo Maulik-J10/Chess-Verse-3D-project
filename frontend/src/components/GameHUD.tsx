@@ -22,9 +22,11 @@ import {
   History,
   BookOpen,
   Settings as SettingsIcon,
+  Palette,
   X
 } from 'lucide-react';
-import { CameraPreset } from '../chess/types';
+import { CameraPreset, getBlackPieceShadeOption } from '../chess/types';
+import { BlackShadeTray } from './BlackShadeTray';
 
 interface GameHUDProps {
   onOpenSettings: () => void;
@@ -37,6 +39,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
   const [copiedCode, setCopiedCode] = useState(false);
   const [showMobileHistory, setShowMobileHistory] = useState(false);
   const [showMobileCamera, setShowMobileCamera] = useState(false);
+  const [showShadeTray, setShowShadeTray] = useState(false);
 
   // Store selections
   const gameMode = useGameStore((s) => s.gameMode);
@@ -51,6 +54,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
   const soundEnabled = useGameStore((s) => s.soundEnabled);
   const cameraPreset = useGameStore((s) => s.cameraPreset);
   const multiplayer = useGameStore((s) => s.multiplayer);
+  const blackPieceShade = useGameStore((s) => s.blackPieceShade);
+  const activeShade = getBlackPieceShadeOption(blackPieceShade);
 
   // Actions
   const resign = useGameStore((s) => s.resign);
@@ -152,8 +157,31 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
           )}
         </div>
 
-        {/* Quick Settings, Rules & Audio */}
-        <div className="flex items-center gap-1.5 bg-[#f7f7f4]/95 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
+        {/* Quick Settings, Color Tray, Rules & Audio */}
+        <div className="relative flex items-center gap-1.5 bg-[#f7f7f4]/95 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
+          <button
+            onClick={() => {
+              soundManager.playClick();
+              setShowShadeTray((v) => !v);
+            }}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-colors cursor-pointer text-xs font-serif font-bold ${
+              showShadeTray
+                ? 'bg-[#c6a45c]/15 text-[#202226] ring-1 ring-[#c6a45c]'
+                : 'text-[#666762] hover:text-[#202226] hover:bg-black/5'
+            }`}
+            title={`Black Piece Shade Tray (${activeShade.label})`}
+            aria-label="Black Piece Shade Tray"
+          >
+            <span
+              className="w-3.5 h-3.5 rounded-full border border-black/25 shadow-inner"
+              style={{
+                background: `radial-gradient(circle at 30% 30%, ${activeShade.highlightHex}, ${activeShade.hex})`,
+              }}
+            />
+            <Palette className="w-3.5 h-3.5 text-[#c6a45c]" />
+            <span className="hidden xl:inline text-[11px]">SHADES</span>
+          </button>
+
           <button
             onClick={toggleSound}
             className="p-1.5 rounded-lg text-[#666762] hover:text-[#202226] hover:bg-black/5 transition-colors cursor-pointer"
@@ -187,6 +215,12 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
             <SettingsIcon className="w-4 h-4 text-[#666762]" />
             <span className="hidden xl:inline text-[11px]">SETTINGS</span>
           </button>
+
+          {showShadeTray && (
+            <div className="absolute right-0 top-full mt-2 z-50">
+              <BlackShadeTray variant="popover" onClose={() => setShowShadeTray(false)} />
+            </div>
+          )}
         </div>
       </header>
 
@@ -296,6 +330,38 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
               playerName=""
             />
           </div>
+        </div>
+
+        {/* Live Floating Mobile Color Tray Pill (non-blocking preview over 3D board) */}
+        <div className="relative flex justify-end">
+          <button
+            onClick={() => {
+              soundManager.playClick();
+              setShowShadeTray((v) => !v);
+            }}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-serif font-bold shadow-md cursor-pointer transition-all active:scale-95 ${
+              showShadeTray
+                ? 'bg-white border-[#c6a45c] ring-1 ring-[#c6a45c] text-[#202226]'
+                : 'bg-[#f7f7f4]/95 border-[#c6a45c]/40 text-[#202226]'
+            }`}
+            title={`Black Piece Shades (${activeShade.label})`}
+            aria-label="Mobile Black Piece Shade Tray"
+          >
+            <span
+              className="w-3 h-3 rounded-full border border-black/25 shrink-0"
+              style={{
+                background: `radial-gradient(circle at 30% 30%, ${activeShade.highlightHex}, ${activeShade.hex})`,
+              }}
+            />
+            <Palette className="w-3 h-3 text-[#c6a45c]" />
+            <span>Shade</span>
+          </button>
+
+          {showShadeTray && (
+            <div className="absolute right-0 top-full mt-1.5 z-50">
+              <BlackShadeTray variant="popover" onClose={() => setShowShadeTray(false)} />
+            </div>
+          )}
         </div>
       </div>
 

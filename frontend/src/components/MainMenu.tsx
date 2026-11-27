@@ -5,7 +5,8 @@ import {
   AIDifficulty, 
   AI_DIFFICULTIES, 
   TIME_CONTROLS, 
-  TimeControlPreset 
+  TimeControlPreset,
+  getBlackPieceShadeOption,
 } from '../chess/types';
 import { 
   Bot, 
@@ -16,8 +17,10 @@ import {
   Sparkles, 
   Check, 
   ChevronRight,
+  Palette,
   X
 } from 'lucide-react';
+import { BlackShadeTray } from './BlackShadeTray';
 
 interface MainMenuProps {
   onOpenSettings: () => void;
@@ -26,12 +29,15 @@ interface MainMenuProps {
 
 export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenHowToPlay }) => {
   const [showAiSetup, setShowAiSetup] = useState(false);
+  const [showShadeTray, setShowShadeTray] = useState(false);
   const [selectedDifficulty, setSelectedDifficulty] = useState<AIDifficulty>('maximum');
   const [selectedColor, setSelectedColor] = useState<'w' | 'b' | 'random'>('w');
   const [selectedTimeControl, setSelectedTimeControl] = useState<TimeControlPreset>(TIME_CONTROLS[5]); // Rapid 10+0
 
   const startAiGame = useGameStore((s) => s.startAiGame);
   const setGameMode = useGameStore((s) => s.setGameMode);
+  const blackPieceShade = useGameStore((s) => s.blackPieceShade);
+  const activeShade = getBlackPieceShadeOption(blackPieceShade);
 
   const handleStartAi = () => {
     soundManager.playClick();
@@ -64,13 +70,36 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenHowToP
         </div>
 
         {/* Top-Right Quick Access Pills (Always Visible & Accessible on Mobile, Tablet & Desktop) */}
-        <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 shrink-0 animate-fade-in">
+        <div className="relative pointer-events-auto flex items-center gap-1.5 sm:gap-2 shrink-0 animate-fade-in">
+          <button
+            onClick={() => {
+              soundManager.playClick();
+              setShowShadeTray((v) => !v);
+            }}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-[#202226] text-xs font-serif font-bold shadow-sm lg:backdrop-blur-md cursor-pointer transition-all active:scale-95 min-h-[38px] ${
+              showShadeTray
+                ? 'bg-white border-[#c6a45c] ring-1 ring-[#c6a45c]'
+                : 'bg-white/95 hover:bg-white border-[#c6a45c]/35 hover:border-[#c6a45c]'
+            }`}
+            title={`Black Piece Shades (${activeShade.label})`}
+            aria-label="Black Piece Shade Tray"
+          >
+            <span
+              className="w-3.5 h-3.5 rounded-full border border-black/25 shrink-0 shadow-inner"
+              style={{
+                background: `radial-gradient(circle at 30% 30%, ${activeShade.highlightHex}, ${activeShade.hex})`,
+              }}
+            />
+            <Palette className="w-3.5 h-3.5 text-[#c6a45c] sm:hidden" />
+            <span className="hidden sm:inline text-[11px] sm:text-xs">Shades</span>
+          </button>
+
           <button
             onClick={() => {
               soundManager.playClick();
               onOpenHowToPlay();
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/95 hover:bg-white border border-[#c6a45c]/35 hover:border-[#c6a45c] text-[#202226] text-xs font-serif font-bold shadow-sm lg:backdrop-blur-md cursor-pointer transition-all active:scale-95 min-h-[38px]"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-white/95 hover:bg-white border border-[#c6a45c]/35 hover:border-[#c6a45c] text-[#202226] text-xs font-serif font-bold shadow-sm lg:backdrop-blur-md cursor-pointer transition-all active:scale-95 min-h-[38px]"
             title="How to Play Chess & Camera Controls"
           >
             <BookOpen className="w-3.5 h-3.5 text-[#c6a45c]" />
@@ -82,12 +111,18 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenHowToP
               soundManager.playClick();
               onOpenSettings();
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/95 hover:bg-white border border-[#c6a45c]/35 hover:border-[#c6a45c] text-[#202226] text-xs font-serif font-bold shadow-sm lg:backdrop-blur-md cursor-pointer transition-all active:scale-95 min-h-[38px]"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-white/95 hover:bg-white border border-[#c6a45c]/35 hover:border-[#c6a45c] text-[#202226] text-xs font-serif font-bold shadow-sm lg:backdrop-blur-md cursor-pointer transition-all active:scale-95 min-h-[38px]"
             title="Graphics & Sound Settings"
           >
             <Settings className="w-3.5 h-3.5 text-[#666762]" />
             <span className="inline text-[11px] sm:text-xs">Settings</span>
           </button>
+
+          {showShadeTray && (
+            <div className="absolute right-0 top-full mt-2 z-50">
+              <BlackShadeTray variant="popover" onClose={() => setShowShadeTray(false)} />
+            </div>
+          )}
         </div>
       </div>
 

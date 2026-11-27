@@ -1,7 +1,10 @@
 import { create } from 'zustand';
 import { 
   AIDifficulty, 
+  BLACK_PIECE_SHADES,
+  BlackPieceShadeId,
   CameraPreset, 
+  DEFAULT_BLACK_PIECE_SHADE,
   GameMode, 
   GraphicsQuality, 
   LegalMoveInfo, 
@@ -58,6 +61,7 @@ interface GameState {
   showHints: boolean;
   showLegalMoves: boolean;
   graphicsQuality: GraphicsQuality;
+  blackPieceShade: BlackPieceShadeId;
   showPerfOverlay: boolean;
   isMobile: boolean;
   isMoveHistoryOpen: boolean;
@@ -101,6 +105,7 @@ interface GameState {
   flipBoard: () => void;
   setHistoryIndex: (index: number) => void;
   setGraphicsQuality: (quality: GraphicsQuality) => void;
+  setBlackPieceShade: (shade: BlackPieceShadeId) => void;
   togglePerfOverlay: () => void;
   toggleMoveHistory: () => void;
   setMoveHistoryOpen: (open: boolean) => void;
@@ -124,6 +129,22 @@ export const checkIsMobile = (): boolean => {
 };
 
 const initialDeviceProfile = detectDeviceCapabilities();
+
+const BLACK_SHADE_STORAGE_KEY = 'chessverse-black-shade';
+
+function loadInitialBlackPieceShade(): BlackPieceShadeId {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const saved = window.localStorage.getItem(BLACK_SHADE_STORAGE_KEY);
+      if (saved && BLACK_PIECE_SHADES.some((s) => s.id === saved)) {
+        return saved as BlackPieceShadeId;
+      }
+    }
+  } catch {
+    // Ignore restricted storage environments (e.g. private browsing)
+  }
+  return DEFAULT_BLACK_PIECE_SHADE;
+}
 
 export const useGameStore = create<GameState>((set, get) => {
   // Listen for engine moves in AI mode
@@ -172,6 +193,7 @@ export const useGameStore = create<GameState>((set, get) => {
     showHints: true,
     showLegalMoves: true,
     graphicsQuality: initialDeviceProfile.recommendedQuality,
+    blackPieceShade: loadInitialBlackPieceShade(),
     showPerfOverlay: false,
     isMobile: initialDeviceProfile.isMobileViewport,
     isMoveHistoryOpen: false,
@@ -645,6 +667,16 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     setGraphicsQuality: (quality) => set({ graphicsQuality: quality }),
+    setBlackPieceShade: (shade) => {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem(BLACK_SHADE_STORAGE_KEY, shade);
+        }
+      } catch {
+        // Ignore storage write errors
+      }
+      set({ blackPieceShade: shade });
+    },
     togglePerfOverlay: () => set((s) => ({ showPerfOverlay: !s.showPerfOverlay })),
     toggleMoveHistory: () => set((s) => ({ isMoveHistoryOpen: !s.isMoveHistoryOpen })),
     setMoveHistoryOpen: (open) => set({ isMoveHistoryOpen: open }),
