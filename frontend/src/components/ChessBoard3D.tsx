@@ -95,6 +95,7 @@ export const ChessBoard3D: React.FC = () => {
   const darkInstancedRef = useRef<THREE.InstancedMesh>(null);
   const floatTimeRef = useRef(0);
   const pointerDownRef = useRef<{ x: number; y: number; time: number; square: string } | null>(null);
+  const lastCursorRef = useRef<'auto' | 'pointer'>('auto');
 
   const pieces = useGameStore((s) => s.pieces);
   const selectedSquare = useGameStore((s) => s.selectedSquare);
@@ -197,6 +198,7 @@ export const ChessBoard3D: React.FC = () => {
       <instancedMesh
         ref={lightInstancedRef}
         args={[boardAssets.tileBoxGeo, boardAssets.lightSquareMat, 32]}
+        castShadow={shadowsEnabled}
         receiveShadow={shadowsEnabled}
         frustumCulled={false}
         raycast={NO_RAYCAST}
@@ -204,6 +206,7 @@ export const ChessBoard3D: React.FC = () => {
       <instancedMesh
         ref={darkInstancedRef}
         args={[boardAssets.tileBoxGeo, boardAssets.darkSquareMat, 32]}
+        castShadow={shadowsEnabled}
         receiveShadow={shadowsEnabled}
         frustumCulled={false}
         raycast={NO_RAYCAST}
@@ -247,14 +250,21 @@ export const ChessBoard3D: React.FC = () => {
             : (e) => {
                 const sq = resolveSquareFromHit(e);
                 const isLegal = sq ? legalMarkers.some((m) => m.square === sq) : false;
-                document.body.style.cursor = isLegal ? 'pointer' : 'auto';
+                const next = isLegal ? 'pointer' : 'auto';
+                if (lastCursorRef.current !== next) {
+                  lastCursorRef.current = next;
+                  document.body.style.cursor = next;
+                }
               }
         }
         onPointerOut={
           isMobile
             ? undefined
             : () => {
-                document.body.style.cursor = 'auto';
+                if (lastCursorRef.current !== 'auto') {
+                  lastCursorRef.current = 'auto';
+                  document.body.style.cursor = 'auto';
+                }
               }
         }
       />
@@ -311,12 +321,14 @@ export const ChessBoard3D: React.FC = () => {
       <mesh
         geometry={boardAssets.frameMergedGeo}
         material={boardAssets.frameMat}
+        castShadow={shadowsEnabled}
         receiveShadow={shadowsEnabled}
         raycast={NO_RAYCAST}
       />
       <mesh
         geometry={boardAssets.goldMergedGeo}
         material={boardAssets.goldTrimMat}
+        castShadow={shadowsEnabled}
         raycast={NO_RAYCAST}
       />
 

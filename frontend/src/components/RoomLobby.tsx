@@ -1,17 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { socketClient, RoomData } from '../multiplayer/socketClient';
 import { TIME_CONTROLS, TimeControlPreset } from '../chess/types';
-import { 
-  Users, 
-  PlusCircle, 
-  LogIn, 
-  Copy, 
-  Check, 
-  ArrowLeft, 
-  ShieldCheck, 
-  Loader2, 
-  AlertCircle
+import {
+  Users,
+  PlusCircle,
+  LogIn,
+  Copy,
+  Check,
+  ArrowLeft,
+  ShieldCheck,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 
 export const RoomLobby: React.FC = () => {
@@ -25,19 +25,45 @@ export const RoomLobby: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const creatingRef = useRef(false);
+  const opponentHandlerRef = useRef<((payload: any) => void) | null>(null);
+
   const startMultiplayerGame = useGameStore((s) => s.startMultiplayerGame);
   const setGameMode = useGameStore((s) => s.setGameMode);
 
+  const cleanupWaitingListener = () => {
+    const s = socketClient.getSocket();
+    if (s && opponentHandlerRef.current) {
+      s.off('room:opponent-connected', opponentHandlerRef.current);
+      opponentHandlerRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      cleanupWaitingListener();
+    };
+  }, []);
+
+  // Sanitize input strictly to 6 numeric digits (preserves leading zeroes)
+  const sanitizeSixDigits = (raw: string): string => {
+    return raw.replace(/\D/g, '').slice(0, 6);
+  };
+
   // Handle Room Creation
   const handleCreateRoom = () => {
+    if (creatingRef.current || loading) return;
+    creatingRef.current = true;
     setLoading(true);
     setErrorMsg(null);
+    cleanupWaitingListener();
 
     socketClient.createRoom(
-      playerName,
+      playerName.trim() || 'Grandmaster',
       selectedTimeControl,
       preferredColor,
       (res) => {
+        creatingRef.current = false;
         setLoading(false);
         if (res.success && res.room && res.player) {
           const room = res.room;
@@ -45,15 +71,18 @@ export const RoomLobby: React.FC = () => {
           setCreatedRoom(room);
           setActiveTab('waiting');
 
-          // Listen for opponent connection
           const s = socketClient.getSocket();
           if (s) {
-            s.once('room:opponent-connected', () => {
-              startMultiplayerGame(room.roomCode, player.color, selectedTimeControl, true);
-            });
+            const onOpponentConnected = (payload: any) => {
+              const latestRoom: RoomData = payload?.room || room;
+              cleanupWaitingListener();
+              startMultiplayerGame(latestRoom, player.color, selectedTimeControl, true);
+            };
+            opponentHandlerRef.current = onOpponentConnected;
+            s.once('room:opponent-connected', onOpponentConnected);
           }
         } else {
-          setErrorMsg(res.error || 'Failed to create room on server');
+          setErrorMsg(res.error || 'Failed to create room on server. Please try again.');
         }
       }
     );
@@ -61,33 +90,52 @@ export const RoomLobby: React.FC = () => {
 
   // Handle Room Joining
   const handleJoinRoom = () => {
-    if (!joinCode.trim()) {
-      setErrorMsg('Please enter a valid room code');
+    if (loading) return;
+    const cleaned = sanitizeSixDigits(joinCode);
+    if (cleaned.length !== 6 || !/^\d{6}$/.test(cleaned)) {
+      setErrorMsg('Please enter a complete 6-digit numeric room code.');
       return;
     }
 
     setLoading(true);
     setErrorMsg(null);
 
-    socketClient.joinRoom(joinCode.trim(), playerName, (res) => {
+    socketClient.joinRoom(cleaned, playerName.trim() || 'Challenger', (res) => {
       setLoading(false);
       if (res.success && res.room && res.player) {
         const room = res.room;
         const player = res.player;
-        const matchedTc = TIME_CONTROLS.find(
-          (t) => t.minutes === room.timeControl.initialMinutes && t.increment === room.timeControl.incrementSeconds
-        ) || selectedTimeControl;
+        const matchedTc =
+          TIME_CONTROLS.find(
+            (t) =>
+              t.minutes === room.timeControl.initialMinutes &&
+              t.increment === room.timeControl.incrementSeconds
+          ) || selectedTimeControl;
 
-        startMultiplayerGame(room.roomCode, player.color, matchedTc, false);
+        startMultiplayerGame(room, player.color, matchedTc, false);
       } else {
-        setErrorMsg(res.error || 'Failed to join room. Verify the code and try again.');
+        setErrorMsg(res.error || 'Failed to join room. Verify the 6-digit code and try again.');
       }
     });
   };
 
+  const handleBack = () => {
+    setErrorMsg(null);
+    if (activeTab === 'waiting') {
+      cleanupWaitingListener();
+      socketClient.leaveRoom();
+      setCreatedRoom(null);
+      setActiveTab('select');
+    } else if (activeTab === 'select') {
+      setGameMode('menu');
+    } else {
+      setActiveTab('select');
+    }
+  };
+
   const copyToClipboard = () => {
     if (createdRoom) {
-      navigator.clipboard.writeText(createdRoom.roomCode);
+      navigator.clipboard?.writeText(createdRoom.roomCode);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -98,10 +146,8 @@ export const RoomLobby: React.FC = () => {
       <div className="relative w-full max-w-lg bg-[#f7f7f4] border border-[#c6a45c]/40 rounded-3xl p-5 sm:p-8 shadow-2xl text-[#202226] max-h-[90dvh] overflow-y-auto">
         {/* Back Button */}
         <button
-          onClick={() => {
-            if (activeTab === 'select') setGameMode('menu');
-            else setActiveTab('select');
-          }}
+          type="button"
+          onClick={handleBack}
           className="absolute top-6 left-6 flex items-center gap-1.5 text-xs text-[#666762] hover:text-[#202226] transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -119,7 +165,10 @@ export const RoomLobby: React.FC = () => {
 
         {/* Error Alert */}
         {errorMsg && (
-          <div className="flex items-center gap-2 p-3 mb-4 rounded-xl bg-red-50 border border-red-300 text-red-700 text-xs font-semibold">
+          <div
+            role="alert"
+            className="flex items-center gap-2 p-3 mb-4 rounded-xl bg-red-50 border border-red-300 text-red-700 text-xs font-semibold"
+          >
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{errorMsg}</span>
           </div>
@@ -129,7 +178,11 @@ export const RoomLobby: React.FC = () => {
         {activeTab === 'select' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4">
             <button
-              onClick={() => setActiveTab('create')}
+              type="button"
+              onClick={() => {
+                setErrorMsg(null);
+                setActiveTab('create');
+              }}
               className="flex flex-col items-center justify-center p-6 rounded-2xl bg-white border border-[#d6d6d2] hover:border-[#c6a45c] transition-all group active:scale-95 cursor-pointer shadow-sm hover:shadow-md"
             >
               <div className="p-4 rounded-full bg-[#c6a45c]/15 text-[#c6a45c] group-hover:scale-110 transition-transform mb-3">
@@ -139,12 +192,17 @@ export const RoomLobby: React.FC = () => {
                 CREATE A ROOM
               </span>
               <span className="text-xs text-[#666762] text-center mt-1">
-                Host a new match and invite your friend with a room code
+                Host a match and invite your friend with a 6-digit code
               </span>
             </button>
 
             <button
-              onClick={() => setActiveTab('join')}
+              type="button"
+              onClick={() => {
+                setErrorMsg(null);
+                setJoinCode(''); // Ensure join input always opens completely empty
+                setActiveTab('join');
+              }}
               className="flex flex-col items-center justify-center p-6 rounded-2xl bg-white border border-[#d6d6d2] hover:border-[#c6a45c] transition-all group active:scale-95 cursor-pointer shadow-sm hover:shadow-md"
             >
               <div className="p-4 rounded-full bg-[#666762]/10 text-[#202226] group-hover:scale-110 transition-transform mb-3">
@@ -154,7 +212,7 @@ export const RoomLobby: React.FC = () => {
                 JOIN A ROOM
               </span>
               <span className="text-xs text-[#666762] text-center mt-1">
-                Enter an invitation code to connect to an existing game
+                Enter a 6-digit room code to connect to an existing game
               </span>
             </button>
           </div>
@@ -220,6 +278,7 @@ export const RoomLobby: React.FC = () => {
             </div>
 
             <button
+              type="button"
               onClick={handleCreateRoom}
               disabled={loading}
               className="w-full py-3 rounded-xl bg-[#c6a45c] hover:bg-[#b5934a] text-white font-serif font-bold text-sm tracking-wider uppercase transition-all shadow-glow-gold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
@@ -230,7 +289,7 @@ export const RoomLobby: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 3: JOIN ROOM INPUT */}
+        {/* TAB 3: JOIN ROOM INPUT (Strictly Empty 6-Digit Numeric Input — No CHS Prefix) */}
         {activeTab === 'join' && (
           <div className="space-y-4">
             <div>
@@ -246,20 +305,39 @@ export const RoomLobby: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-[#666762] mb-1">Enter Room Code</label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="room-code-input" className="block text-xs font-semibold text-[#666762]">
+                  Enter 6-Digit Room Code
+                </label>
+                <span className="text-[11px] font-mono text-[#a7a8a5]">{joinCode.length}/6 digits</span>
+              </div>
               <input
+                id="room-code-input"
                 type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="one-time-code"
                 value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                className="w-full px-4 py-3 rounded-xl bg-white border-2 border-[#c6a45c]/50 text-[#202226] text-center font-mono text-xl tracking-widest uppercase focus:outline-none focus:border-[#c6a45c]"
-                placeholder="CHS---"
-                maxLength={8}
+                onChange={(e) => {
+                  setErrorMsg(null);
+                  setJoinCode(sanitizeSixDigits(e.target.value));
+                }}
+                onPaste={(e) => {
+                  e.preventDefault();
+                  const pasted = e.clipboardData.getData('text') || '';
+                  setErrorMsg(null);
+                  setJoinCode(sanitizeSixDigits(pasted));
+                }}
+                className="w-full px-4 py-3 rounded-xl bg-white border-2 border-[#c6a45c]/50 text-[#202226] text-center font-mono text-xl tracking-[0.3em] focus:outline-none focus:border-[#c6a45c]"
+                placeholder="Enter 6-digit code"
+                maxLength={6}
               />
             </div>
 
             <button
+              type="button"
               onClick={handleJoinRoom}
-              disabled={loading || !joinCode}
+              disabled={loading}
               className="w-full py-3 rounded-xl bg-[#c6a45c] hover:bg-[#b5934a] text-white font-serif font-bold text-sm tracking-wider uppercase transition-all shadow-glow-gold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -277,13 +355,16 @@ export const RoomLobby: React.FC = () => {
 
             <div>
               <h3 className="text-lg font-serif font-bold text-[#202226]">ROOM CREATED SUCCESSFULLY</h3>
-              <p className="text-xs text-[#666762] mt-1">Share this code with your opponent:</p>
+              <p className="text-xs text-[#666762] mt-1">Share this 6-digit code with your friend:</p>
             </div>
 
             {/* Room Code Badge */}
             <div className="p-4 rounded-2xl bg-white border-2 border-[#c6a45c] inline-block w-full max-w-xs shadow-glow-gold">
               <div className="text-xs text-[#666762] uppercase tracking-widest mb-1 font-semibold">Room Code</div>
-              <div className="text-3xl font-mono font-extrabold text-[#c6a45c] tracking-wider">
+              <div
+                data-testid="created-room-code"
+                className="text-3xl font-mono font-extrabold text-[#c6a45c] tracking-[0.25em]"
+              >
                 {createdRoom.roomCode}
               </div>
             </div>
@@ -291,6 +372,7 @@ export const RoomLobby: React.FC = () => {
             {/* Copy / Share Button */}
             <div className="flex gap-2 justify-center max-w-xs mx-auto">
               <button
+                type="button"
                 onClick={copyToClipboard}
                 className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[#c6a45c]/15 hover:bg-[#c6a45c]/25 border border-[#c6a45c] text-[#202226] text-xs font-serif font-bold transition-all cursor-pointer"
               >

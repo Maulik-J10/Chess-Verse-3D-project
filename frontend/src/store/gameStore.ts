@@ -15,7 +15,7 @@ import {
 import { ChessLogicController } from '../chess/chessLogic';
 import { stockfishEngine } from '../chess/stockfishEngine';
 import { soundManager } from '../audio/soundManager';
-import { socketClient } from '../multiplayer/socketClient';
+import { socketClient, RoomData } from '../multiplayer/socketClient';
 import { detectDeviceCapabilities } from '../utils/deviceTier';
 
 interface GameState {
@@ -87,9 +87,9 @@ interface GameState {
   // Actions
   setGameMode: (mode: GameMode) => void;
   startAiGame: (preferredColor: 'w' | 'b' | 'random', diff: AIDifficulty, tc: TimeControlPreset) => void;
-  startMultiplayerGame: (roomCode: string, color: PieceColor, tc: TimeControlPreset, isCreator: boolean) => void;
+  startMultiplayerGame: (room: RoomData, color: PieceColor, tc: TimeControlPreset, isCreator: boolean) => void;
   selectSquare: (square: string | null) => void;
-  requestMove: (from: string, to: string, promotion?: PieceType) => void;
+  requestMove: (from: string, to: string, promotion?: PieceType, fromRemote?: boolean) => void;
   executePromotion: (promoPiece: PieceType) => void;
   cancelPromotion: () => void;
   undoMove: () => void;
@@ -227,21 +227,29 @@ export const useGameStore = create<GameState>((set, get) => {
       }
     },
 
-    startMultiplayerGame: (roomCode, color, tc, isCreator) => {
-      chessController.reset();
+    startMultiplayerGame: (room, color, tc, isCreator) => {
+      if (room.fen) {
+        chessController.load(room.fen);
+      } else {
+        chessController.reset();
+      }
       const initialMs = tc.minutes * 60 * 1000;
+      const whiteTime = room.clock?.whiteTimeMs ?? initialMs;
+      const blackTime = room.clock?.blackTimeMs ?? initialMs;
+      const opponentSession = color === 'w' ? room.players?.black : room.players?.white;
+      const opponentName = opponentSession?.name || (isCreator ? 'Challenger' : 'Room Host');
 
       set({
         gameMode: 'friend',
         fen: chessController.getFen(),
-        turn: 'w',
+        turn: chessController.getTurn(),
         playerColor: color,
-        opponentName: isCreator ? 'Challenger' : 'Room Host',
+        opponentName,
         pieces: chessController.getPieces(),
         selectedSquare: null,
         legalMoves: [],
         lastMove: null,
-        kingInCheckSquare: null,
+        kingInCheckSquare: chessController.inCheck() ? chessController.getKingSquare(chessController.getTurn()) : null,
         promotionPending: null,
         history: [],
         historyIndex: -1,
@@ -250,16 +258,18 @@ export const useGameStore = create<GameState>((set, get) => {
         materialAdvantage: 0,
         isThinking: false,
         timeControl: tc,
-        whiteTimeMs: initialMs,
-        blackTimeMs: initialMs,
+        whiteTimeMs: whiteTime,
+        blackTimeMs: blackTime,
         isClockRunning: tc.minutes > 0,
         gameResult: null,
         isFlipped: color === 'b',
         cameraPreset: color === 'b' ? 'black' : 'white',
         multiplayer: {
-          roomCode,
+          roomCode: room.roomCode,
+          roomId: room.roomId,
           isCreator,
           opponentConnected: true,
+          opponentDisconnected: false,
         },
       });
 
@@ -273,13 +283,59 @@ export const useGameStore = create<GameState>((set, get) => {
         s.off('game:resign');
         s.off('game:finished');
         s.off('game:offer-draw');
+        s.off('game:accept-draw');
+        s.off('game:reject-draw');
         s.off('room:opponent-disconnected');
         s.off('room:opponent-reconnected');
+        s.off('connect');
+
+        // Auto-reconnect on transient network drop during active multiplayer match
+        s.on('connect', () => {
+          const cur = get();
+          if (cur.gameMode === 'friend' && !cur.gameResult?.isOver && cur.multiplayer.roomId) {
+            socketClient.reconnectRoom((res) => {
+              if (res.success && res.room) {
+                chessController.load(res.room.fen);
+                const evalData = chessController.getCapturedAndAdvantage();
+                set({
+                  fen: res.room.fen,
+                  turn: chessController.getTurn(),
+                  pieces: chessController.getPieces(),
+                  capturedWhite: evalData.whiteCaptured,
+                  capturedBlack: evalData.blackCaptured,
+                  materialAdvantage: evalData.whiteAdvantage,
+                  whiteTimeMs: res.room.clock?.whiteTimeMs ?? get().whiteTimeMs,
+                  blackTimeMs: res.room.clock?.blackTimeMs ?? get().blackTimeMs,
+                });
+              }
+            });
+          }
+        });
 
         s.on('game:move', (data: any) => {
-          const move = data.move;
-          if (move) {
-            get().requestMove(move.from, move.to, move.promotion as PieceType | undefined);
+          const move = data?.move;
+          if (!move) return;
+
+          // Skip duplicate local execution if we already applied our own optimistic move,
+          // while still syncing authoritative server clock times.
+          if (data.fen && chessController.getFen() === data.fen) {
+            if (data.clock) {
+              set({
+                whiteTimeMs: data.clock.whiteTimeMs,
+                blackTimeMs: data.clock.blackTimeMs,
+                isClockRunning: !!data.clock.isRunning && get().timeControl.minutes > 0,
+              });
+            }
+            return;
+          }
+
+          get().requestMove(move.from, move.to, move.promotion as PieceType | undefined, true);
+          if (data.clock) {
+            set({
+              whiteTimeMs: data.clock.whiteTimeMs,
+              blackTimeMs: data.clock.blackTimeMs,
+              isClockRunning: !!data.clock.isRunning && get().timeControl.minutes > 0,
+            });
           }
         });
 
@@ -332,6 +388,23 @@ export const useGameStore = create<GameState>((set, get) => {
             },
             isClockRunning: false,
           });
+        });
+
+        s.on('game:finished', (data: any) => {
+          const state = get();
+          if (state.gameResult?.isOver) return;
+          if (data?.reason === 'timeout') {
+            const winner = data.winner as PieceColor;
+            set({
+              gameResult: {
+                isOver: true,
+                title: 'Time Out',
+                details: `${winner === 'w' ? 'Black' : 'White'} ran out of time! ${winner === 'w' ? 'White' : 'Black'} wins.`,
+                winner,
+              },
+              isClockRunning: false,
+            });
+          }
         });
 
         s.on('room:opponent-disconnected', (data: any) => {
@@ -405,17 +478,38 @@ export const useGameStore = create<GameState>((set, get) => {
       }
     },
 
-    requestMove: (from, to, promotion) => {
+    requestMove: (from, to, promotion, fromRemote = false) => {
       const state = get();
       if (state.gameResult?.isOver) return;
 
-      // In live multiplayer, if this is the player's own move, send to backend
-      if (state.gameMode === 'friend' && state.turn === state.playerColor) {
-        socketClient.sendMove(from, to, promotion);
-      }
-
+      const prevFen = chessController.getFen();
+      const prevHistory = state.history;
       const moveRes = chessController.makeMove(from, to, promotion);
       if (!moveRes.success) return;
+
+      // In live multiplayer, submit own move to authoritative backend and roll back if rejected
+      if (!fromRemote && state.gameMode === 'friend' && state.turn === state.playerColor) {
+        socketClient.sendMove(from, to, promotion, (res) => {
+          if (res && res.success === false) {
+            chessController.load(prevFen);
+            const rollbackEval = chessController.getCapturedAndAdvantage();
+            set({
+              fen: prevFen,
+              turn: chessController.getTurn(),
+              pieces: chessController.getPieces(),
+              selectedSquare: null,
+              legalMoves: [],
+              history: prevHistory,
+              capturedWhite: rollbackEval.whiteCaptured,
+              capturedBlack: rollbackEval.blackCaptured,
+              materialAdvantage: rollbackEval.whiteAdvantage,
+              kingInCheckSquare: chessController.inCheck()
+                ? chessController.getKingSquare(chessController.getTurn())
+                : null,
+            });
+          }
+        });
+      }
 
       // Play appropriate sound
       if (chessController.isCheckmate()) {

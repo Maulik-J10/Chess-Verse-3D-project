@@ -28,10 +28,10 @@ import { CameraPreset } from '../chess/types';
 
 interface GameHUDProps {
   onOpenSettings: () => void;
-  onOpenHowToPlay: () => void;
+  onOpenRules: () => void;
 }
 
-export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPlay }) => {
+export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenRules }) => {
   const [showResignConfirm, setShowResignConfirm] = useState(false);
   const [showNewGameConfirm, setShowNewGameConfirm] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
@@ -171,9 +171,9 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
           </button>
 
           <button
-            onClick={onOpenHowToPlay}
+            onClick={onOpenRules}
             className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[#666762] hover:text-[#202226] hover:bg-black/5 transition-colors cursor-pointer text-xs font-serif font-bold"
-            title="Rules & How to Play"
+            title="Chess Rules"
           >
             <BookOpen className="w-4 h-4 text-[#c6a45c]" />
             <span className="hidden xl:inline text-[11px]">RULES</span>
@@ -241,10 +241,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
             <button
               onClick={() => {
                 soundManager.playClick();
-                onOpenHowToPlay();
+                onOpenRules();
               }}
               className="p-1 min-[360px]:p-1.5 rounded-lg bg-white border border-[#c6a45c]/40 text-[#202226] active:scale-95 cursor-pointer h-8 w-8 min-[380px]:h-9 min-[380px]:w-9 flex items-center justify-center"
-              title="Rules & How to Play"
+              title="Chess Rules"
             >
               <BookOpen className="w-3.5 h-3.5 text-[#c6a45c]" />
             </button>
@@ -572,33 +572,6 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenHowToPla
               <RotateCcw className="w-3.5 h-3.5 text-[#c6a45c]" />
               <span>Reset to Default View</span>
             </button>
-
-            {/* Quick Actions in Drawer */}
-            <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-[#c6a45c]/20">
-              <button
-                onClick={() => {
-                  soundManager.playClick();
-                  setShowMobileCamera(false);
-                  onOpenHowToPlay();
-                }}
-                className="py-2.5 rounded-xl bg-white active:bg-gray-100 border border-[#d6d6d2] text-[#202226] font-serif font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-              >
-                <BookOpen className="w-3.5 h-3.5 text-[#c6a45c]" />
-                <span>How to Play</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  soundManager.playClick();
-                  setShowMobileCamera(false);
-                  onOpenSettings();
-                }}
-                className="py-2.5 rounded-xl bg-white active:bg-gray-100 border border-[#d6d6d2] text-[#202226] font-serif font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-              >
-                <SettingsIcon className="w-3.5 h-3.5 text-[#666762]" />
-                <span>Settings</span>
-              </button>
-            </div>
           </div>
         </div>
       )}

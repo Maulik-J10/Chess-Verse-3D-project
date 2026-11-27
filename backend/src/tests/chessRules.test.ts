@@ -102,28 +102,51 @@ console.log('--- STARTING FIDE CHESS RULES & SERVICE TESTS ---');
   console.log('✓ ClockService init, turn transitions, and increment passed');
 }
 
-// 10. Room Service
+// 10. Room Service & 6-Digit Numeric Code Validation
 {
   const roomService = new RoomService();
+  const codes = new Set<string>();
+  for (let i = 0; i < 20; i++) {
+    const { room } = roomService.createRoom(`socket_batch_${i}`, {
+      playerName: `Tester ${i}`,
+      timeControl: { name: 'Rapid 10+0', initialMinutes: 10, incrementSeconds: 0 },
+      preferredColor: 'w',
+    });
+    assert(/^\d{6}$/.test(room.roomCode), `Room code must be exactly 6 numeric digits, got: ${room.roomCode}`);
+    assert(!codes.has(room.roomCode), `Duplicate active room code generated: ${room.roomCode}`);
+    codes.add(room.roomCode);
+  }
+
   const { room, player } = roomService.createRoom('socket_123', {
     playerName: 'Grandmaster Magnus',
     timeControl: { name: 'Rapid 10+0', initialMinutes: 10, incrementSeconds: 0 },
     preferredColor: 'w',
   });
-  assert(room.roomCode.startsWith('CHS'), 'Room code must start with CHS');
+  assert(/^\d{6}$/.test(room.roomCode), 'Room code must be 6 numeric digits');
+  assert(!room.roomCode.startsWith('CHS'), 'Room code must not have CHS prefix');
   assert.strictEqual(player.name, 'Grandmaster Magnus');
   assert.strictEqual(player.color, 'w');
   assert.strictEqual(room.status, 'waiting');
 
-  // Join Room
+  // Invalid codes must fail
+  const invalidAlpha = roomService.joinRoom('socket_bad1', { roomCode: 'CHS123', playerName: 'Bad' });
+  assert.strictEqual(invalidAlpha.success, false);
+  const invalidShort = roomService.joinRoom('socket_bad2', { roomCode: '12345', playerName: 'Bad' });
+  assert.strictEqual(invalidShort.success, false);
+
+  // Join Room with leading-zero preservation / whitespace tolerance
   const joinRes = roomService.joinRoom('socket_456', {
-    roomCode: room.roomCode,
+    roomCode: ` ${room.roomCode} `,
     playerName: 'Challenger Hikaru',
   });
   assert.strictEqual(joinRes.success, true);
   assert.strictEqual(joinRes.player?.color, 'b');
   assert.strictEqual(room.status, 'active');
-  console.log('✓ RoomService create, code generation, and 2-player join passed');
+
+  // 3rd player must be rejected
+  const fullRes = roomService.joinRoom('socket_789', { roomCode: room.roomCode, playerName: 'Extra' });
+  assert.strictEqual(fullRes.success, false);
+  console.log('✓ RoomService create, 6-digit code uniqueness, validation, and 2-player join passed');
 }
 
 console.log('--- ALL TESTS PASSED SUCCESSFULLY! ---');

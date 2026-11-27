@@ -133,9 +133,11 @@ export function registerGameEvents(
     }
 
     if (result.isCheckmate) {
+      roomService.markRoomConcluded(room.roomId);
       io.to(room.roomId).emit('game:checkmate', { winner: playerColor, room });
       io.to(room.roomId).emit('game:finished', { reason: 'checkmate', winner: playerColor, room });
     } else if (result.isDraw) {
+      roomService.markRoomConcluded(room.roomId);
       io.to(room.roomId).emit('game:draw', { reason: result.drawReason, room });
       io.to(room.roomId).emit('game:finished', { reason: result.drawReason, winner: 'draw', room });
     }

@@ -6,7 +6,7 @@ import { RoomLobby } from './components/RoomLobby';
 import { GameResult } from './components/GameResult';
 import { PawnPromotionModal } from './components/PawnPromotionModal';
 import { SettingsModal } from './components/SettingsModal';
-import { HowToPlayModal } from './components/HowToPlayModal';
+import { RulesModal } from './components/RulesModal';
 import { Preloader } from './components/Preloader';
 import { PerformanceOverlay } from './components/PerformanceOverlay';
 import { useGameStore } from './store/gameStore';
@@ -15,7 +15,7 @@ export const App: React.FC = () => {
   const gameMode = useGameStore((s) => s.gameMode);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isHowToPlayOpen, setIsHowToPlayOpen] = useState(false);
+  const [isRulesOpen, setIsRulesOpen] = useState(false);
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#121316]">
@@ -29,7 +29,7 @@ export const App: React.FC = () => {
       {gameMode === 'menu' && (
         <MainMenu
           onOpenSettings={() => setIsSettingsOpen(true)}
-          onOpenHowToPlay={() => setIsHowToPlayOpen(true)}
+          onOpenRules={() => setIsRulesOpen(true)}
         />
       )}
 
@@ -40,7 +40,7 @@ export const App: React.FC = () => {
       {(gameMode === 'ai' || gameMode === 'friend') && (
         <GameHUD
           onOpenSettings={() => setIsSettingsOpen(true)}
-          onOpenHowToPlay={() => setIsHowToPlayOpen(true)}
+          onOpenRules={() => setIsRulesOpen(true)}
         />
       )}
 
@@ -49,7 +49,7 @@ export const App: React.FC = () => {
       <PawnPromotionModal />
       <GameResult />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
-      <HowToPlayModal isOpen={isHowToPlayOpen} onClose={() => setIsHowToPlayOpen(false)} />
+      <RulesModal isOpen={isRulesOpen} onClose={() => setIsRulesOpen(false)} />
     </div>
   );
 };

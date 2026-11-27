@@ -55,11 +55,25 @@ async function runMultiplayerTest() {
       preferredColor: 'w',
     }, (res: any) => {
       assert.strictEqual(res.success, true);
-      assert(res.room.roomCode.startsWith('CHS'));
+      assert(/^\d{6}$/.test(res.room.roomCode), `Expected 6-digit numeric code, got ${res.room.roomCode}`);
       assert.strictEqual(res.player.color, 'w');
       roomCode = res.room.roomCode;
       playerAId = res.player.playerId;
-      console.log(`✓ Room created successfully with code: ${roomCode}`);
+      console.log(`✓ Room created successfully with 6-digit code: ${roomCode}`);
+      resolve();
+    });
+  });
+
+  // 1b. Invalid room codes are authoritatively rejected
+  await new Promise<void>((resolve) => {
+    clientB.emit('room:join', { roomCode: '000000' === roomCode ? '000001' : '000000', playerName: 'Ghost' }, (res: any) => {
+      assert.strictEqual(res.success, false);
+      resolve();
+    });
+  });
+  await new Promise<void>((resolve) => {
+    clientB.emit('room:join', { roomCode: 'CHS123', playerName: 'Ghost' }, (res: any) => {
+      assert.strictEqual(res.success, false);
       resolve();
     });
   });

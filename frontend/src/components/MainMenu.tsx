@@ -13,7 +13,6 @@ import {
   BookOpen, 
   Settings, 
   Play, 
-  Sparkles, 
   Check, 
   ChevronRight,
   X
@@ -21,10 +20,10 @@ import {
 
 interface MainMenuProps {
   onOpenSettings: () => void;
-  onOpenHowToPlay: () => void;
+  onOpenRules: () => void;
 }
 
-export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenHowToPlay }) => {
+export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenRules }) => {
   const [showAiSetup, setShowAiSetup] = useState(false);
   const [selectedDifficulty, setSelectedDifficulty] = useState<AIDifficulty>('maximum');
   const [selectedColor, setSelectedColor] = useState<'w' | 'b' | 'random'>('w');
@@ -45,33 +44,28 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenHowToP
 
   return (
     <div className="absolute inset-0 pointer-events-none z-30 flex flex-col justify-between p-3 sm:p-8 md:p-10 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] select-none overflow-y-auto overflow-x-hidden overscroll-none">
-      {/* Top Header Row: Title & Royal Gallery Branding + Quick Access Header Actions */}
+      {/* Top Header Row: Branding & Single Rules / Settings Actions */}
       <div className="flex items-start justify-between w-full gap-2 pointer-events-none">
         {/* Branding Header */}
         <div className="pointer-events-auto flex flex-col items-start max-w-xs sm:max-w-md animate-fade-in mt-0.5 sm:mt-0">
-          <div className="flex items-center gap-2 px-3 py-0.5 sm:px-3.5 sm:py-1 rounded-full bg-white/95 border border-[#c6a45c]/40 text-[#c6a45c] text-[10px] sm:text-xs font-serif font-bold tracking-widest uppercase mb-1.5 sm:mb-3 shadow-sm lg:backdrop-blur-md">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Royal 3D Chess Arena</span>
-          </div>
-
-          <h1 className="text-2xl sm:text-4xl md:text-5xl font-serif font-black tracking-wider text-[#202226] drop-shadow-sm text-left">
-            Chess<span className="text-[#c6a45c]">Verse</span><span className="text-[#202226]">3D</span>
+          <h1 className="text-2xl sm:text-4xl md:text-5xl font-serif font-black tracking-wider text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)] text-left">
+            ChessVerse 3D
           </h1>
 
-          <p className="text-[10px] sm:text-sm font-serif italic text-[#666762] mt-0.5 sm:mt-1.5 tracking-widest uppercase text-left">
+          <p className="text-[10px] sm:text-sm font-serif italic text-[#1e2024] mt-0.5 sm:mt-1.5 tracking-widest uppercase text-left">
             "Think beyond the board. See beyond the move."
           </p>
         </div>
 
-        {/* Top-Right Quick Access Pills (Always Visible & Accessible on Mobile, Tablet & Desktop) */}
+        {/* Top-Right Quick Access Pills (Single Rules + Single Settings Entry Across All Screens) */}
         <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 shrink-0 animate-fade-in">
           <button
             onClick={() => {
               soundManager.playClick();
-              onOpenHowToPlay();
+              onOpenRules();
             }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/95 hover:bg-white border border-[#c6a45c]/35 hover:border-[#c6a45c] text-[#202226] text-xs font-serif font-bold shadow-sm lg:backdrop-blur-md cursor-pointer transition-all active:scale-95 min-h-[38px]"
-            title="How to Play Chess & Camera Controls"
+            title="Chess Rules"
           >
             <BookOpen className="w-3.5 h-3.5 text-[#c6a45c]" />
             <span className="inline text-[11px] sm:text-xs">Rules</span>
@@ -137,31 +131,6 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenHowToP
           </div>
           <ChevronRight className="w-4 h-4 text-[#a7a8a5] group-hover:text-[#c6a45c] group-hover:translate-x-1 transition-all" />
         </button>
-
-        {/* HOW TO PLAY & SETTINGS ROW */}
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => {
-              soundManager.playClick();
-              onOpenHowToPlay();
-            }}
-            className="flex items-center justify-center gap-1.5 p-3 rounded-xl bg-[#f7f7f4]/95 lg:backdrop-blur-md border border-[#c6a45c]/30 hover:border-[#c6a45c] hover:bg-white text-xs font-semibold text-[#202226] hover:text-[#c6a45c] transition-all cursor-pointer shadow-royal-card active:scale-95 min-h-[44px]"
-          >
-            <BookOpen className="w-4 h-4 text-[#c6a45c]" />
-            <span>HOW TO PLAY</span>
-          </button>
-
-          <button
-            onClick={() => {
-              soundManager.playClick();
-              onOpenSettings();
-            }}
-            className="flex items-center justify-center gap-1.5 p-3 rounded-xl bg-[#f7f7f4]/95 lg:backdrop-blur-md border border-[#c6a45c]/30 hover:border-[#c6a45c] hover:bg-white text-xs font-semibold text-[#202226] hover:text-[#c6a45c] transition-all cursor-pointer shadow-royal-card active:scale-95 min-h-[44px]"
-          >
-            <Settings className="w-4 h-4 text-[#666762]" />
-            <span>SETTINGS</span>
-          </button>
-        </div>
       </div>
 
       {/* ================= AI CONFIGURATION MODAL ================= */}

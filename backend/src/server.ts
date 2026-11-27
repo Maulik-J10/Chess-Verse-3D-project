@@ -41,11 +41,29 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'The Grand Chess Room Multiplayer API', timestamp: Date.now() });
 });
 
-// Periodic Clock Ticker & Timeout Watchdog (every 1 second)
+// Periodic Clock Watchdog, Rate-Limiter Pruning & Expired Room Cleanup (every 1 second)
 setInterval(() => {
   rateLimiter.cleanup();
+  roomService.cleanupExpiredRooms((removedRoomId) => {
+    gameService.removeGame(removedRoomId);
+  });
 
-  // We could check all active rooms for timeout
+  for (const room of roomService.getActiveRooms()) {
+    if ((room.status === 'active' || room.status === 'check') && room.clock.isRunning) {
+      const times = ClockService.getUpdatedTimes(room.clock);
+      if (times.hasTimedOut && times.timeoutColor) {
+        const res = roomService.timeoutGame(room.roomId, times.timeoutColor);
+        if (res.success && res.room) {
+          io.to(room.roomId).emit('game:finished', {
+            reason: 'timeout',
+            winner: res.room.winner,
+            status: 'timeout',
+            room: res.room,
+          });
+        }
+      }
+    }
+  }
 }, 1000);
 
 io.on('connection', (socket) => {

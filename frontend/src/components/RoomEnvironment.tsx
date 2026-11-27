@@ -19,7 +19,12 @@ export const CORNER_CHANDELIER_OFFSET = 12.8;
 // Shared texture caches across mounts (prevents CPU re-bakes on navigation/remount)
 const wallArtworkTextureCache = new Map<string, THREE.CanvasTexture>();
 const rugTextureCache = new Map<number, THREE.CanvasTexture>();
-const oakTextureCache = new Map<number, THREE.CanvasTexture>();
+interface OakFloorTextures {
+  map: THREE.CanvasTexture;
+  bumpMap: THREE.CanvasTexture;
+  roughnessMap: THREE.CanvasTexture;
+}
+const oakTextureCache = new Map<number, OakFloorTextures>();
 
 // Singleton shared materials & merged geometries for WallArtwork frames
 const wallArtStatic = typeof document !== 'undefined' ? (() => {
@@ -228,132 +233,6 @@ const WallArtwork: React.FC<WallArtworkProps> = ({
           distance={7.5}
         />
       )}
-    </group>
-  );
-};
-
-// ==================================================================================
-// MINIMAL ARCHITECTURAL WALL PANELS (Replaces the 8 Removed Corner Paintings)
-// Ultra-lightweight InstancedMesh wall panelling (ONLY 3 draw calls total across 8 sites!):
-// - Understated warm ivory recessed wainscot field
-// - Thin dark walnut architectural border frame matching room columns
-// - Subtle matte champagne-gold inner geometric inlay (softer than central artwork)
-// Zero shadows, zero textures, zero spotlights, zero animations.
-// ==================================================================================
-const minimalPanelAssets = typeof document !== 'undefined' ? (() => {
-  const pw = 2.6;
-  const ph = 4.4;
-
-  const panelGeo = new THREE.BoxGeometry(pw, ph, 0.025);
-  const panelMat = new THREE.MeshStandardMaterial({
-    color: '#e5dfd4',
-    roughness: 0.78,
-    metalness: 0.02,
-  });
-
-  // Thin outer walnut border frame merged into 1 geometry
-  const frameT = 0.065;
-  const frameD = 0.04;
-  const topBot = new THREE.BoxGeometry(pw + frameT * 2, frameT, frameD);
-  const sideBar = new THREE.BoxGeometry(frameT, ph, frameD);
-  const walnutGeo = mergeTransformedParts([
-    { geo: topBot, pos: [0, (ph + frameT) / 2, 0.015] },
-    { geo: topBot, pos: [0, -(ph + frameT) / 2, 0.015] },
-    { geo: sideBar, pos: [-(pw + frameT) / 2, 0, 0.015] },
-    { geo: sideBar, pos: [(pw + frameT) / 2, 0, 0.015] },
-  ]);
-  topBot.dispose();
-  sideBar.dispose();
-
-  const walnutMat = new THREE.MeshStandardMaterial({
-    color: '#2d1c13',
-    roughness: 0.45,
-    metalness: 0.05,
-  });
-
-  // Subtle matte champagne-gold inner rectangular pinstripe inset 0.28m from outer rim
-  const iw = pw - 0.56;
-  const ih = ph - 0.56;
-  const goldT = 0.024;
-  const goldD = 0.018;
-  const gTopBot = new THREE.BoxGeometry(iw + goldT * 2, goldT, goldD);
-  const gSide = new THREE.BoxGeometry(goldT, ih, goldD);
-  const goldInlayGeo = mergeTransformedParts([
-    { geo: gTopBot, pos: [0, (ih + goldT) / 2, 0.018] },
-    { geo: gTopBot, pos: [0, -(ih + goldT) / 2, 0.018] },
-    { geo: gSide, pos: [-(iw + goldT) / 2, 0, 0.018] },
-    { geo: gSide, pos: [(iw + goldT) / 2, 0, 0.018] },
-  ]);
-  gTopBot.dispose();
-  gSide.dispose();
-
-  const satinGoldMat = new THREE.MeshStandardMaterial({
-    color: '#b8944c',
-    metalness: 0.72,
-    roughness: 0.36,
-  });
-
-  return { panelGeo, panelMat, walnutGeo, walnutMat, goldInlayGeo, satinGoldMat };
-})() : null;
-
-const PANEL_TRANSFORMS: { pos: [number, number, number]; rotY: number }[] = [
-  // North wall wings (facing +Z)
-  { pos: [-11.8, 4.9, -(ROOM_HALF_SIZE - 0.04)], rotY: 0 },
-  { pos: [11.8, 4.9, -(ROOM_HALF_SIZE - 0.04)], rotY: 0 },
-  // South wall wings (facing -Z)
-  { pos: [-11.8, 4.9, ROOM_HALF_SIZE - 0.04], rotY: Math.PI },
-  { pos: [11.8, 4.9, ROOM_HALF_SIZE - 0.04], rotY: Math.PI },
-  // West wall wings (facing +X)
-  { pos: [-(ROOM_HALF_SIZE - 0.04), 4.9, -11.8], rotY: Math.PI / 2 },
-  { pos: [-(ROOM_HALF_SIZE - 0.04), 4.9, 11.8], rotY: Math.PI / 2 },
-  // East wall wings (facing -X)
-  { pos: [ROOM_HALF_SIZE - 0.04, 4.9, -11.8], rotY: -Math.PI / 2 },
-  { pos: [ROOM_HALF_SIZE - 0.04, 4.9, 11.8], rotY: -Math.PI / 2 },
-];
-
-const MinimalArchitecturalWallPanels: React.FC = () => {
-  const backingRef = useRef<THREE.InstancedMesh>(null);
-  const walnutRef = useRef<THREE.InstancedMesh>(null);
-  const goldRef = useRef<THREE.InstancedMesh>(null);
-
-  useEffect(() => {
-    const dummy = new THREE.Object3D();
-    PANEL_TRANSFORMS.forEach((cfg, idx) => {
-      dummy.position.set(cfg.pos[0], cfg.pos[1], cfg.pos[2]);
-      dummy.rotation.set(0, cfg.rotY, 0);
-      dummy.scale.set(1, 1, 1);
-      dummy.updateMatrix();
-      backingRef.current?.setMatrixAt(idx, dummy.matrix);
-      walnutRef.current?.setMatrixAt(idx, dummy.matrix);
-      goldRef.current?.setMatrixAt(idx, dummy.matrix);
-    });
-    if (backingRef.current) backingRef.current.instanceMatrix.needsUpdate = true;
-    if (walnutRef.current) walnutRef.current.instanceMatrix.needsUpdate = true;
-    if (goldRef.current) goldRef.current.instanceMatrix.needsUpdate = true;
-  }, []);
-
-  if (!minimalPanelAssets) return null;
-
-  return (
-    <group>
-      <instancedMesh
-        ref={backingRef}
-        args={[minimalPanelAssets.panelGeo, minimalPanelAssets.panelMat, PANEL_TRANSFORMS.length]}
-        frustumCulled={false}
-        raycast={NO_RAYCAST}
-      />
-      <instancedMesh
-        ref={walnutRef}
-        args={[minimalPanelAssets.walnutGeo, minimalPanelAssets.walnutMat, PANEL_TRANSFORMS.length]}
-        frustumCulled={false}
-        raycast={NO_RAYCAST}
-      />
-      <instancedMesh
-        ref={goldRef}
-        args={[minimalPanelAssets.goldInlayGeo, minimalPanelAssets.satinGoldMat, PANEL_TRANSFORMS.length]}
-        frustumCulled={false}
-        raycast={NO_RAYCAST}
-      />
     </group>
   );
 };
@@ -943,44 +822,78 @@ const ArchitecturalWall: React.FC<ArchitecturalWallProps> = ({
 };
 
 // ==================================================================================
-// EUROPEAN OAK HARDWOOD FLOOR (36m x 36m matching oak plank proportions)
+// EUROPEAN OAK HARDWOOD FLOOR (Realistic satin natural oak planks + bevel bump/roughness)
 // ==================================================================================
-const EuropeanOakHardwoodFloor: React.FC<{ receiveShadow: boolean }> = ({ receiveShadow }) => {
-  const oakTexture = useMemo(() => {
+const EuropeanOakHardwoodFloor: React.FC<{ receiveShadow: boolean; detailedMaterial: boolean }> = ({
+  receiveShadow,
+  detailedMaterial,
+}) => {
+  const floorTextures = useMemo(() => {
     if (typeof document === 'undefined') return null;
     const caps = detectDeviceCapabilities();
     const res = caps.isLowEndHardware || caps.isTouch ? 512 : 1024;
     if (oakTextureCache.has(res)) {
       return oakTextureCache.get(res)!;
     }
+    const auxRes = res <= 512 ? 256 : 512;
     const scale = res / 1024;
+    const auxScale = auxRes / 1024;
 
     const canvas = document.createElement('canvas');
     canvas.width = res;
     canvas.height = res;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
+
+    const bumpCanvas = document.createElement('canvas');
+    bumpCanvas.width = auxRes;
+    bumpCanvas.height = auxRes;
+    const bCtx = bumpCanvas.getContext('2d');
+
+    const roughCanvas = document.createElement('canvas');
+    roughCanvas.width = auxRes;
+    roughCanvas.height = auxRes;
+    const rCtx = roughCanvas.getContext('2d');
+
+    if (!ctx || !bCtx || !rCtx) return null;
 
     ctx.scale(scale, scale);
+    bCtx.scale(auxScale, auxScale);
+    rCtx.scale(auxScale, auxScale);
+
+    bCtx.fillStyle = '#828282';
+    bCtx.fillRect(0, 0, 1024, 1024);
+    rCtx.fillStyle = '#929292'; // Natural satin ~0.57 baseline modulated per plank
+    rCtx.fillRect(0, 0, 1024, 1024);
 
     const numRows = 16;
     const rowHeight = 1024 / numRows;
 
-    const oakTones = ['#ba8f5c', '#af8452', '#b68c58', '#a67c49', '#c29965', '#b28755', '#9e7543', '#bb9260'];
+    // Natural smoked / satin European oak palette (avoids artificial bright yellow-orange tones)
+    const oakTones = [
+      '#9b7b56',
+      '#8d6d49',
+      '#a38460',
+      '#846543',
+      '#947551',
+      '#7b5d3d',
+      '#9e7e59',
+      '#8a6b48',
+    ];
 
-    let seed = 42;
+    let seed = 137;
     const random = () => {
       seed = (seed * 9301 + 49297) % 233280;
       return seed / 233280;
     };
 
-    const fibersPerPlank = res <= 512 ? 7 : 14;
+    const fibersPerPlank = res <= 512 ? 8 : 16;
     for (let r = 0; r < numRows; r++) {
       const y = r * rowHeight;
-      const offsets = [0];
-      const startOffset = ((r * 341) % 400) + 200;
-      if (startOffset < 900) offsets.push(startOffset);
-      if (startOffset + 475 < 975) offsets.push(startOffset + 475);
+      // Staggered irregular plank joints across tile boundaries
+      const j1 = 160 + Math.floor(random() * 240);
+      const j2 = j1 + 290 + Math.floor(random() * 220);
+      const offsets = [0, j1];
+      if (j2 < 910) offsets.push(j2);
       offsets.push(1024);
 
       for (let p = 0; p < offsets.length - 1; p++) {
@@ -988,92 +901,167 @@ const EuropeanOakHardwoodFloor: React.FC<{ receiveShadow: boolean }> = ({ receiv
         const x2 = offsets[p + 1];
         const pWidth = x2 - x1;
 
-        ctx.fillStyle = oakTones[(r * 3 + p) % oakTones.length];
+        const baseHex = oakTones[(r * 5 + p * 3) % oakTones.length];
+        ctx.fillStyle = baseHex;
         ctx.fillRect(x1, y, pWidth, rowHeight);
 
-        const plankGrad = ctx.createLinearGradient(x1, y, x1, y + rowHeight);
-        plankGrad.addColorStop(0.0, 'rgba(255, 255, 255, 0.08)');
-        plankGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.0)');
-        plankGrad.addColorStop(1.0, 'rgba(0, 0, 0, 0.12)');
+        // Soft lengthwise tone variation per plank
+        const plankGrad = ctx.createLinearGradient(x1, y, x2, y + rowHeight);
+        plankGrad.addColorStop(0.0, 'rgba(255, 242, 224, 0.05)');
+        plankGrad.addColorStop(0.45, 'rgba(0, 0, 0, 0.0)');
+        plankGrad.addColorStop(1.0, 'rgba(24, 14, 6, 0.09)');
         ctx.fillStyle = plankGrad;
         ctx.fillRect(x1, y, pWidth, rowHeight);
 
+        // Per-plank satin roughness variation
+        const rTone = Math.round(134 + random() * 34);
+        rCtx.fillStyle = `rgb(${rTone},${rTone},${rTone})`;
+        rCtx.fillRect(x1, y, pWidth, rowHeight);
+
+        // Organic undulating wood grain fibers (baked into both diffuse and bump/roughness)
         const darkFibers = new Path2D();
         const lightFibers = new Path2D();
         for (let f = 0; f < fibersPerPlank; f++) {
-          const fy = y + (f / fibersPerPlank) * rowHeight + (random() - 0.5) * 2;
-          const targetPath = random() > 0.45 ? darkFibers : lightFibers;
+          const fy = y + 3 + (f / fibersPerPlank) * (rowHeight - 6) + (random() - 0.5) * 2.2;
+          const targetPath = random() > 0.42 ? darkFibers : lightFibers;
           targetPath.moveTo(x1, fy);
-          const waveFreq = 0.016 + random() * 0.012;
-          const waveAmp = 1.0 + random() * 2.0;
-          for (let wx = x1 + 48; wx <= x2; wx += 48) {
-            targetPath.lineTo(wx, fy + Math.sin(wx * waveFreq + r) * waveAmp);
+          const waveFreq = 0.011 + random() * 0.01;
+          const waveAmp = 1.2 + random() * 2.2;
+          const phase = random() * Math.PI * 2;
+          for (let wx = x1 + 36; wx <= x2; wx += 36) {
+            targetPath.lineTo(wx, Math.max(y + 1, Math.min(y + rowHeight - 1, fy + Math.sin(wx * waveFreq + phase) * waveAmp)));
           }
         }
-        ctx.strokeStyle = 'rgba(95, 62, 32, 0.18)';
-        ctx.lineWidth = 1.0;
+        ctx.strokeStyle = 'rgba(68, 43, 20, 0.16)';
+        ctx.lineWidth = 1.05;
         ctx.stroke(darkFibers);
 
-        ctx.strokeStyle = 'rgba(245, 218, 175, 0.10)';
+        ctx.strokeStyle = 'rgba(236, 205, 162, 0.09)';
         ctx.lineWidth = 1.0;
         ctx.stroke(lightFibers);
 
-        if (random() > 0.65) {
-          const cathCenter = x1 + pWidth * (0.3 + random() * 0.4);
-          const cathY = y + rowHeight * (0.4 + random() * 0.2);
-          for (let c = 6; c <= 28; c += 8) {
-            ctx.strokeStyle = `rgba(80, 50, 24, ${0.14 + random() * 0.10})`;
-            ctx.lineWidth = 1.0;
+        bCtx.strokeStyle = 'rgba(65, 65, 65, 0.25)';
+        bCtx.lineWidth = 1.1;
+        bCtx.stroke(darkFibers);
+        rCtx.strokeStyle = 'rgba(182, 182, 182, 0.22)';
+        rCtx.lineWidth = 1.1;
+        rCtx.stroke(darkFibers);
+
+        // Subtle cathedral growth arcs (curved heartwood bands)
+        if (random() > 0.48 && pWidth > 180) {
+          const cathCenter = x1 + pWidth * (0.25 + random() * 0.5);
+          const cathY = y + rowHeight * (0.35 + random() * 0.3);
+          for (let c = 8; c <= 30; c += 7) {
+            ctx.strokeStyle = 'rgba(62, 38, 17, 0.13)';
+            ctx.lineWidth = 1.1;
             ctx.beginPath();
-            ctx.ellipse(cathCenter, cathY, c * 2.5, c * 0.7, 0, 0, Math.PI);
+            ctx.ellipse(cathCenter, cathY, c * 3.2, c * 0.65, 0, 0, Math.PI);
             ctx.stroke();
           }
         }
 
-        if (random() > 0.78) {
-          const knotX = x1 + pWidth * (0.2 + random() * 0.6);
-          const knotY = y + rowHeight * (0.3 + random() * 0.4);
-          const knotR = 4 + random() * 5;
-          ctx.fillStyle = '#422814';
+        // Feathered realistic wood knots (graduated concentric rings, zero harsh cartoon blobs)
+        if (random() > 0.72 && pWidth > 160) {
+          const knotX = x1 + pWidth * (0.22 + random() * 0.56);
+          const knotY = y + rowHeight * (0.28 + random() * 0.44);
+          const knotR = 5 + random() * 4.5;
+          const kGrad = ctx.createRadialGradient(knotX, knotY, 0.5, knotX, knotY, knotR * 1.6);
+          kGrad.addColorStop(0.0, 'rgba(48, 28, 12, 0.72)');
+          kGrad.addColorStop(0.45, 'rgba(72, 44, 20, 0.42)');
+          kGrad.addColorStop(1.0, 'rgba(90, 56, 28, 0.0)');
+          ctx.fillStyle = kGrad;
           ctx.beginPath();
-          ctx.ellipse(knotX, knotY, knotR, knotR * 0.65, random() * 0.3, 0, Math.PI * 2);
+          ctx.ellipse(knotX, knotY, knotR * 1.8, knotR * 0.85, (random() - 0.5) * 0.25, 0, Math.PI * 2);
           ctx.fill();
         }
 
+        // Micro-beveled V-groove end joints (natural shadow + slight top specular edge)
         if (x1 > 0) {
-          ctx.strokeStyle = '#2d1b0c';
-          ctx.lineWidth = 2.0;
+          ctx.strokeStyle = 'rgba(34, 20, 9, 0.52)';
+          ctx.lineWidth = 1.6;
           ctx.beginPath();
-          ctx.moveTo(x1, y);
-          ctx.lineTo(x1, y + rowHeight);
+          ctx.moveTo(x1, y + 1);
+          ctx.lineTo(x1, y + rowHeight - 1);
           ctx.stroke();
+
+          bCtx.strokeStyle = '#383838';
+          bCtx.lineWidth = 2.2;
+          bCtx.beginPath();
+          bCtx.moveTo(x1, y);
+          bCtx.lineTo(x1, y + rowHeight);
+          bCtx.stroke();
+
+          rCtx.strokeStyle = '#d4d4d4';
+          rCtx.lineWidth = 2.2;
+          rCtx.beginPath();
+          rCtx.moveTo(x1, y);
+          rCtx.lineTo(x1, y + rowHeight);
+          rCtx.stroke();
         }
       }
 
-      ctx.strokeStyle = '#2b190a';
-      ctx.lineWidth = 2.0;
+      // Horizontal beveled V-groove plank seam + faint highlight edge
+      ctx.strokeStyle = 'rgba(32, 18, 8, 0.52)';
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(1024, y);
       ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(248, 224, 188, 0.09)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(0, y + 1.4);
+      ctx.lineTo(1024, y + 1.4);
+      ctx.stroke();
+
+      bCtx.strokeStyle = '#363636';
+      bCtx.lineWidth = 2.2;
+      bCtx.beginPath();
+      bCtx.moveTo(0, y);
+      bCtx.lineTo(1024, y);
+      bCtx.stroke();
+
+      rCtx.strokeStyle = '#d4d4d4';
+      rCtx.lineWidth = 2.2;
+      rCtx.beginPath();
+      rCtx.moveTo(0, y);
+      rCtx.lineTo(1024, y);
+      rCtx.stroke();
     }
 
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(5.625, 5.625);
-    texture.generateMipmaps = true;
-    texture.minFilter = THREE.LinearMipmapLinearFilter;
-    texture.anisotropy = caps.isTouch ? 2 : 8;
-    texture.colorSpace = THREE.SRGBColorSpace;
-    oakTextureCache.set(res, texture);
-    return texture;
+    const setupRepeatingTex = (c: HTMLCanvasElement, srgb: boolean) => {
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(4.5, 4.5);
+      tex.generateMipmaps = true;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.anisotropy = caps.isTouch ? 2 : 8;
+      if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    };
+
+    const result: OakFloorTextures = {
+      map: setupRepeatingTex(canvas, true),
+      bumpMap: setupRepeatingTex(bumpCanvas, false),
+      roughnessMap: setupRepeatingTex(roughCanvas, false),
+    };
+    oakTextureCache.set(res, result);
+    return result;
   }, []);
 
   return (
     <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow={receiveShadow} raycast={NO_RAYCAST}>
       <planeGeometry args={[ROOM_SIZE, ROOM_SIZE]} />
-      <meshStandardMaterial map={oakTexture || undefined} roughness={0.36} metalness={0.04} />
+      <meshStandardMaterial
+        map={floorTextures?.map}
+        bumpMap={detailedMaterial ? floorTextures?.bumpMap : undefined}
+        bumpScale={detailedMaterial ? 0.008 : 0}
+        roughnessMap={detailedMaterial ? floorTextures?.roughnessMap : undefined}
+        roughness={0.54}
+        metalness={0.02}
+      />
     </mesh>
   );
 };
@@ -1224,11 +1212,27 @@ const ceilingStatic = typeof document !== 'undefined' ? (() => {
 // ==================================================================================
 export const RoomEnvironment: React.FC = () => {
   const graphicsQuality = useGameStore((s) => s.graphicsQuality);
+  const { invalidate } = useThree();
+  const keyLightRef = useRef<THREE.DirectionalLight>(null);
 
   const shadowsEnabled = graphicsQuality !== 'low';
   const showCornerLights = graphicsQuality === 'high' || graphicsQuality === 'ultra';
   const showUltraAccents = graphicsQuality === 'ultra';
   const shadowSize = graphicsQuality === 'ultra' ? 2048 : graphicsQuality === 'high' ? 1024 : 512;
+
+  // Dispose and reallocate shadow render target whenever resolution changes so Three.js never
+  // renders a smaller shadowMap viewport into a larger texture (which shifts/corrupts floor shadows).
+  useEffect(() => {
+    const light = keyLightRef.current;
+    if (!light) return;
+    if (light.shadow.map && light.shadow.map.width !== shadowSize) {
+      light.shadow.map.dispose();
+      light.shadow.map = null;
+    }
+    light.shadow.mapSize.set(shadowSize, shadowSize);
+    light.shadow.needsUpdate = true;
+    invalidate();
+  }, [shadowSize, shadowsEnabled, invalidate]);
 
   return (
     <group>
@@ -1238,6 +1242,7 @@ export const RoomEnvironment: React.FC = () => {
 
       {/* Primary Overhead Chessboard Key Light — Replaces central white chandelier light while removing its obstructing body */}
       <directionalLight
+        ref={keyLightRef}
         position={[2.4, 13.5, 3.2]}
         color="#fff7e8"
         intensity={showCornerLights ? 1.35 : 1.55}
@@ -1246,12 +1251,12 @@ export const RoomEnvironment: React.FC = () => {
         shadow-mapSize-height={shadowSize}
         shadow-camera-near={1}
         shadow-camera-far={22}
-        shadow-camera-left={-5.8}
-        shadow-camera-right={5.8}
-        shadow-camera-top={5.8}
-        shadow-camera-bottom={-5.8}
+        shadow-camera-left={-7.5}
+        shadow-camera-right={7.5}
+        shadow-camera-top={7.5}
+        shadow-camera-bottom={-7.5}
         shadow-bias={-0.0004}
-        shadow-normalBias={0.02}
+        shadow-normalBias={0.015}
       />
 
       {/* Soft Counter-Fill Key for Balanced Piece Modeling (skipped on low Performance tier to minimize PBR fragment loop) */}
@@ -1260,17 +1265,17 @@ export const RoomEnvironment: React.FC = () => {
       )}
 
       {/* Floor & Luxury Rug */}
-      <EuropeanOakHardwoodFloor receiveShadow={shadowsEnabled} />
+      <EuropeanOakHardwoodFloor receiveShadow={shadowsEnabled} detailedMaterial={graphicsQuality !== 'low'} />
       <RoyalDesignerRug receiveShadow={shadowsEnabled} />
 
-      {/* Cached Floor Contact Shadow (disabled on Performance 'low'; resolution scales cleanly by tier) */}
+      {/* Cached Floor Contact Shadow — strictly limited below board top surface (far=1.26) so piece silhouettes NEVER bleed onto rug */}
       {graphicsQuality !== 'low' && (
         <ContactShadows
           position={[0, 0.02, 0]}
-          opacity={0.62}
+          opacity={0.55}
           scale={13}
-          blur={1.6}
-          far={5}
+          blur={1.8}
+          far={1.26}
           frames={1}
           resolution={graphicsQuality === 'medium' ? 128 : graphicsQuality === 'high' ? 256 : 512}
           color="#1f2124"
@@ -1336,8 +1341,7 @@ export const RoomEnvironment: React.FC = () => {
         showLampLight={showUltraAccents}
       />
 
-      {/* Lightweight Architectural Wall Mouldings Replacing the 8 Corner Paintings */}
-      <MinimalArchitecturalWallPanels />
+      {/* Clean, Plain Uninterrupted Walls Flanking Central Artwork */}
 
       {/* Four Golden Ring Chandeliers Preserved in All 4 Corners */}
       <CornerGoldRingChandelier position={[-CORNER_CHANDELIER_OFFSET, 0, -CORNER_CHANDELIER_OFFSET]} showLight={showCornerLights} />
