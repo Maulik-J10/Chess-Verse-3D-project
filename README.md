@@ -1,4 +1,4 @@
-# THE GRAND CHESS ROOM
+# ♟️ 3D Chess
 > *"Think Beyond The Board."*
 > *"Think. Strategize. Conquer."*
 
