@@ -103,71 +103,110 @@ const createWoodDiffuseMap = (isWhite: boolean, res: number): THREE.CanvasTextur
     ctx.fillStyle = 'rgba(92, 50, 17, 0.22)';
     ctx.fill(porePath);
   } else {
-    // Charcoal-black wooden finish centered on #383633 with visible warm walnut grain (#49443E, #554B40, #625649)
+    // Balanced dark charcoal wood (-2 shades darker from #464646): #343434 primary, #434343 secondary tones, #525252 raised grain, #232323 shadows
     const bgGrad = ctx.createLinearGradient(0, 0, 1024, 0);
-    bgGrad.addColorStop(0.0, '#383633');
-    bgGrad.addColorStop(0.24, '#3e3b37');
-    bgGrad.addColorStop(0.50, '#34322f');
-    bgGrad.addColorStop(0.76, '#3d3935');
-    bgGrad.addColorStop(1.0, '#383633');
+    bgGrad.addColorStop(0.0, '#343434');
+    bgGrad.addColorStop(0.24, '#393939');
+    bgGrad.addColorStop(0.50, '#2F2F2F');
+    bgGrad.addColorStop(0.76, '#373737');
+    bgGrad.addColorStop(1.0, '#343434');
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, 1024, 1024);
 
-    // Rich charcoal-walnut tonal bands (#49443E / #554B40) wrapping cleanly around piece circumference
-    for (let b = 0; b < 7; b++) {
-      const bx = (b / 7) * 1024;
-      const bw = 85 + rand() * 80;
-      ctx.fillStyle = b % 2 === 0 ? 'rgba(98, 86, 73, 0.24)' : 'rgba(73, 68, 62, 0.26)';
-      ctx.fillRect(bx, 0, bw, 1024);
-      if (bx + bw > 1024) ctx.fillRect(bx - 1024, 0, bw, 1024);
+    // Organic vertical secondary wood tone bands (#434343) & deep shadow streaks (#232323)
+    // Seamless wrap across u=0 / u=1024 so turned Lathe pieces show zero vertical seam
+    for (let b = 0; b < 18; b++) {
+      const x = rand() * 1024;
+      const bw = 10 + rand() * 26;
+      const dx1 = (rand() - 0.5) * 32;
+      const dx2 = (rand() - 0.5) * 32;
+      const isSecondary = rand() > 0.36;
+      ctx.strokeStyle = isSecondary
+        ? `rgba(67, 67, 67, ${(0.58 + rand() * 0.32).toFixed(2)})` // #434343 secondary wood tones
+        : `rgba(35, 35, 35, ${(0.65 + rand() * 0.30).toFixed(2)})`; // #232323 deeper shadow grain
+      ctx.lineWidth = bw;
+      ctx.beginPath();
+      for (const wrapOffset of [0, -1024, 1024]) {
+        if (wrapOffset === 0 || (x + wrapOffset > -60 && x + wrapOffset < 1084)) {
+          ctx.moveTo(x + wrapOffset, 0);
+          ctx.bezierCurveTo(x + wrapOffset + dx1, 340, x + wrapOffset + dx2, 680, x + wrapOffset, 1024);
+        }
+      }
+      ctx.stroke();
     }
 
-    const darkFibers = new Path2D();
-    const warmBrownFibers = new Path2D();
-    for (let i = 0; i < 210; i++) {
+    // Irregular tapered vertical wood grain fibers (#525252 raised grain, #434343 midtone, #232323 crevices)
+    const deepShadowFibers = new Path2D();
+    const secondaryFibers = new Path2D();
+    const raisedHighlightFibers = new Path2D();
+    for (let i = 0; i < 290; i++) {
       const x = rand() * 1024;
-      const dx1 = (rand() - 0.5) * 26;
-      const dx2 = (rand() - 0.5) * 26;
-      const target = rand() > 0.38 ? warmBrownFibers : darkFibers;
+      const dx1 = (rand() - 0.5) * 28;
+      const dx2 = (rand() - 0.5) * 28;
+      const roll = rand();
+      const target =
+        roll < 0.38 ? deepShadowFibers : roll < 0.68 ? secondaryFibers : raisedHighlightFibers;
       for (const wrapOffset of [0, -1024, 1024]) {
-        if (wrapOffset !== 0 && x + wrapOffset > -40 && x + wrapOffset < 1064) {
+        if (wrapOffset === 0 || (x + wrapOffset > -45 && x + wrapOffset < 1069)) {
           target.moveTo(x + wrapOffset, 0);
           target.bezierCurveTo(x + wrapOffset + dx1, 340, x + wrapOffset + dx2, 680, x + wrapOffset, 1024);
-        } else if (wrapOffset === 0) {
-          target.moveTo(x, 0);
-          target.bezierCurveTo(x + dx1, 340, x + dx2, 680, x, 1024);
         }
       }
     }
-    // Natural fine grain pores
-    ctx.strokeStyle = 'rgba(42, 39, 36, 0.38)';
-    ctx.lineWidth = 1.65;
-    ctx.stroke(darkFibers);
 
-    // Clearly distinguishable warm brown grain highlights (#554B40 / #625649)
-    ctx.strokeStyle = 'rgba(98, 86, 73, 0.52)';
-    ctx.lineWidth = 1.55;
-    ctx.stroke(warmBrownFibers);
+    ctx.lineCap = 'butt';
+    ctx.strokeStyle = 'rgba(67, 67, 67, 0.85)'; // #434343
+    ctx.lineWidth = 2.6;
+    ctx.stroke(secondaryFibers);
 
-    // Subtle charcoal cathedral wood growth rings (#49443E / #554B40)
-    ctx.strokeStyle = 'rgba(85, 75, 64, 0.42)';
-    ctx.lineWidth = 1.35;
-    for (let c = 0; c < 4; c++) {
-      const cx = 140 + rand() * 744;
-      const cy = 180 + c * 220;
-      for (let r = 14; r <= 44; r += 10) {
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, r * 0.72, r * 2.8, (rand() - 0.5) * 0.08, 0, Math.PI * 2);
-        ctx.stroke();
+    ctx.strokeStyle = 'rgba(35, 35, 35, 0.90)'; // #232323 deep grain shadows
+    ctx.lineWidth = 2.2;
+    ctx.stroke(deepShadowFibers);
+
+    ctx.strokeStyle = 'rgba(82, 82, 82, 0.84)'; // #525252 subtle raised grain highlights
+    ctx.lineWidth = 2.1;
+    ctx.stroke(raisedHighlightFibers);
+
+    // Natural elongated cathedral heartwood growth loops batched into Path2D
+    const cathedralDark = new Path2D();
+    const cathedralHi = new Path2D();
+    for (let c = 0; c < 6; c++) {
+      const cx = 110 + rand() * 804;
+      const cy = 120 + c * 155 + (rand() - 0.5) * 40;
+      const tilt = (rand() - 0.5) * 0.1;
+      for (let r = 12; r <= 48; r += 9) {
+        cathedralDark.moveTo(cx + r * 0.65, cy);
+        cathedralDark.ellipse(cx, cy, r * 0.65, r * 2.9, tilt, 0, Math.PI * 2);
+        if (r >= 20) {
+          cathedralHi.moveTo(cx + (r - 2) * 0.65, cy);
+          cathedralHi.ellipse(cx, cy, (r - 2) * 0.65, (r - 2) * 2.9, tilt, 0, Math.PI * 2);
+        }
       }
     }
+    ctx.strokeStyle = 'rgba(35, 35, 35, 0.80)';
+    ctx.lineWidth = 1.9;
+    ctx.stroke(cathedralDark);
 
-    const porePath = new Path2D();
-    for (let p = 0; p < 170; p++) {
-      porePath.rect(rand() * 1024, rand() * 1024, 1.4, 4.0);
+    ctx.strokeStyle = 'rgba(82, 82, 82, 0.68)';
+    ctx.lineWidth = 1.4;
+    ctx.stroke(cathedralHi);
+
+    // Open charcoal wood pores (#232323) & subtle raised grain flecks (#525252)
+    const poreShadowPath = new Path2D();
+    const poreHiPath = new Path2D();
+    for (let p = 0; p < 240; p++) {
+      const px = rand() * 1024;
+      const py = rand() * 1024;
+      const ph = 5 + rand() * 9;
+      poreShadowPath.rect(px, py, 1.8, ph);
+      if (p % 3 === 0) {
+        poreHiPath.rect(px + 2.0, py + 1.0, 1.3, ph * 0.75);
+      }
     }
-    ctx.fillStyle = 'rgba(38, 35, 31, 0.34)';
-    ctx.fill(porePath);
+    ctx.fillStyle = 'rgba(35, 35, 35, 0.85)';
+    ctx.fill(poreShadowPath);
+    ctx.fillStyle = 'rgba(82, 82, 82, 0.58)';
+    ctx.fill(poreHiPath);
   }
 
   const caps = detectDeviceCapabilities();
@@ -265,12 +304,105 @@ const createWoodRoughnessMap = (): THREE.CanvasTexture | null => {
   return texture;
 };
 
-// Lazily built shared wood materials (whiteMap centered on #C08244, blackMap centered on charcoal #383633)
+const createBlackWoodBumpMap = (res: number): THREE.CanvasTexture | null => {
+  if (typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = res;
+  canvas.height = res;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  const scale = res / 1024;
+  ctx.scale(scale, scale);
+  const rand = createWoodPRNG(353);
+
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, 1024, 1024);
+
+  const valleyPaths = new Path2D();
+  const ridgePaths = new Path2D();
+  for (let i = 0; i < 240; i++) {
+    const x = rand() * 1024;
+    const dx1 = (rand() - 0.5) * 26;
+    const dx2 = (rand() - 0.5) * 26;
+    const targetPath = rand() > 0.45 ? valleyPaths : ridgePaths;
+    for (const wrapOffset of [0, -1024, 1024]) {
+      if (wrapOffset === 0 || (x + wrapOffset > -40 && x + wrapOffset < 1064)) {
+        targetPath.moveTo(x + wrapOffset, 0);
+        targetPath.bezierCurveTo(x + wrapOffset + dx1, 340, x + wrapOffset + dx2, 680, x + wrapOffset, 1024);
+      }
+    }
+  }
+  ctx.strokeStyle = 'rgba(18, 18, 18, 0.48)';
+  ctx.lineWidth = 2.2;
+  ctx.stroke(valleyPaths);
+
+  ctx.strokeStyle = 'rgba(225, 225, 225, 0.42)';
+  ctx.lineWidth = 1.9;
+  ctx.stroke(ridgePaths);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(1, 2);
+  texture.generateMipmaps = true;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  return texture;
+};
+
+const createBlackWoodRoughnessMap = (): THREE.CanvasTexture | null => {
+  if (typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.scale(0.5, 0.5);
+  const rand = createWoodPRNG(454);
+
+  // Premium matte baseline (#c0c0c0 -> ~0.75 * 0.94 = ~0.70 effective roughness)
+  // with matte open pores (#eaeaea -> ~0.86) and subtle satin grain ridges (#969696 -> ~0.55)
+  ctx.fillStyle = '#c0c0c0';
+  ctx.fillRect(0, 0, 512, 512);
+
+  const poreRoughPath = new Path2D();
+  const satinRidgePath = new Path2D();
+  for (let i = 0; i < 160; i++) {
+    const x = rand() * 512;
+    const dx1 = (rand() - 0.5) * 20;
+    const dx2 = (rand() - 0.5) * 20;
+    const targetPath = rand() > 0.45 ? poreRoughPath : satinRidgePath;
+    for (const wrapOffset of [0, -512, 512]) {
+      if (wrapOffset === 0 || (x + wrapOffset > -30 && x + wrapOffset < 542)) {
+        targetPath.moveTo(x + wrapOffset, 0);
+        targetPath.bezierCurveTo(x + wrapOffset + dx1, 170, x + wrapOffset + dx2, 340, x + wrapOffset, 512);
+      }
+    }
+  }
+  ctx.strokeStyle = 'rgba(236, 236, 236, 0.62)';
+  ctx.lineWidth = 2.0;
+  ctx.stroke(poreRoughPath);
+
+  ctx.strokeStyle = 'rgba(148, 148, 148, 0.58)';
+  ctx.lineWidth = 1.9;
+  ctx.stroke(satinRidgePath);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(1, 2);
+  texture.generateMipmaps = true;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  return texture;
+};
+
+// Lazily built shared wood materials (whiteMap centered on #C08244, blackMap natural charcoal #343434)
 interface PieceMaterials {
   texRes: number;
   whiteMap: THREE.CanvasTexture | null;
   blackMap: THREE.CanvasTexture | null;
   roughMap: THREE.CanvasTexture | null;
+  blackRoughMap: THREE.CanvasTexture | null;
   whiteFull: THREE.MeshStandardMaterial | null;
   blackFull: THREE.MeshStandardMaterial | null;
   whiteBalanced: THREE.MeshStandardMaterial | null;
@@ -304,8 +436,8 @@ function getPieceMaterials(): PieceMaterials | null {
   const blackFast = new THREE.MeshStandardMaterial({
     color: new THREE.Color('#ffffff'),
     map: blackMap || undefined,
-    roughness: 0.56,
-    metalness: 0.03,
+    roughness: 0.72,
+    metalness: 0.02,
   });
 
   const emeraldFelt = new THREE.MeshStandardMaterial({
@@ -315,8 +447,8 @@ function getPieceMaterials(): PieceMaterials | null {
   });
 
   const shadowGroove = new THREE.MeshStandardMaterial({
-    color: new THREE.Color('#201b16'),
-    roughness: 0.92,
+    color: new THREE.Color('#222222'),
+    roughness: 0.94,
     metalness: 0.0,
   });
 
@@ -331,6 +463,7 @@ function getPieceMaterials(): PieceMaterials | null {
     whiteMap,
     blackMap,
     roughMap: null,
+    blackRoughMap: null,
     whiteFull: null,
     blackFull: null,
     whiteBalanced: null,
@@ -351,6 +484,9 @@ function getPieceWoodMaterial(mats: PieceMaterials, color: PieceColor, quality: 
   if (!mats.roughMap) {
     mats.roughMap = createWoodRoughnessMap();
   }
+  if (!mats.blackRoughMap) {
+    mats.blackRoughMap = createBlackWoodRoughnessMap();
+  }
   if (quality === 'medium') {
     if (!mats.whiteBalanced || !mats.blackBalanced) {
       mats.whiteBalanced = new THREE.MeshStandardMaterial({
@@ -363,15 +499,16 @@ function getPieceWoodMaterial(mats: PieceMaterials, color: PieceColor, quality: 
       mats.blackBalanced = new THREE.MeshStandardMaterial({
         color: new THREE.Color('#ffffff'),
         map: mats.blackMap || undefined,
-        roughnessMap: mats.roughMap || undefined,
-        roughness: 0.88,
-        metalness: 0.03,
+        roughnessMap: mats.blackRoughMap || undefined,
+        roughness: 0.94,
+        metalness: 0.02,
       });
     }
     return color === 'w' ? mats.whiteBalanced : mats.blackBalanced;
   }
   if (!mats.whiteFull || !mats.blackFull) {
     const bumpMap = createWoodBumpMap(mats.texRes);
+    const blackBumpMap = createBlackWoodBumpMap(mats.texRes);
     mats.whiteFull = new THREE.MeshStandardMaterial({
       color: new THREE.Color('#ffffff'),
       map: mats.whiteMap || undefined,
@@ -384,11 +521,11 @@ function getPieceWoodMaterial(mats: PieceMaterials, color: PieceColor, quality: 
     mats.blackFull = new THREE.MeshStandardMaterial({
       color: new THREE.Color('#ffffff'),
       map: mats.blackMap || undefined,
-      bumpMap: bumpMap || undefined,
-      bumpScale: 0.015,
-      roughnessMap: mats.roughMap || undefined,
-      roughness: 0.88,
-      metalness: 0.03,
+      bumpMap: blackBumpMap || undefined,
+      bumpScale: 0.026,
+      roughnessMap: mats.blackRoughMap || undefined,
+      roughness: 0.94,
+      metalness: 0.02,
     });
   }
   return color === 'w' ? mats.whiteFull : mats.blackFull;

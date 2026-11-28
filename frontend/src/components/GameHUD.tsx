@@ -174,11 +174,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenRules })
             </div>
           ) : (
             <div
-              className={`px-3.5 py-1.5 rounded-full text-xs font-serif font-bold border shadow-royal-card flex items-center gap-2 ${
-                isMyTurn
-                  ? 'bg-[#f7f7f4]/[0.97] border-[#c6a45c] text-[#202226] shadow-glow-gold'
-                  : 'bg-[#f7f7f4]/[0.97] border-[#d6d6d2] text-[#666762]'
-              }`}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-serif font-bold border shadow-royal-card flex items-center gap-2 ${isMyTurn
+                ? 'bg-[#f7f7f4]/[0.97] border-[#c6a45c] text-[#202226] shadow-glow-gold'
+                : 'bg-[#f7f7f4]/[0.97] border-[#d6d6d2] text-[#666762]'
+                }`}
             >
               <span
                 className={`w-2.5 h-2.5 rounded-full ${turn === 'w' ? 'bg-[#f7f7f4] border border-[#bfc1c2]' : 'bg-[#202226]'

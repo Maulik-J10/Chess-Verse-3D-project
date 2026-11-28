@@ -36,17 +36,15 @@ export const GameClock: React.FC<GameClockProps> = ({
 
   return (
     <div
-      className={`relative flex items-center justify-between gap-2 px-3 py-2 rounded-xl transition-all duration-300 ${
-        isActive
-          ? 'bg-[#c6a45c]/15 border-2 border-[#c6a45c] shadow-glow-gold'
-          : 'bg-white/80 border border-[#d6d6d2]'
-      } ${isCritical && isActive ? 'animate-pulse bg-red-100 border-red-500' : ''}`}
+      className={`relative flex items-center justify-between gap-2 px-3 py-2 rounded-xl transition-all duration-300 ${isActive
+        ? 'bg-[#c6a45c]/15 border-2 border-[#c6a45c] shadow-glow-gold'
+        : 'bg-white/80 border border-[#d6d6d2]'
+        } ${isCritical && isActive ? 'animate-pulse bg-red-100 border-red-500' : ''}`}
     >
       <div className="flex items-center gap-2 min-w-0 flex-1">
         <div
-          className={`w-3.5 h-3.5 rounded-full border shadow-sm shrink-0 ${
-            color === 'w' ? 'bg-[#f7f7f4] border-[#bfc1c2]' : 'bg-[#202226] border-black'
-          }`}
+          className={`w-3.5 h-3.5 rounded-full border shadow-sm shrink-0 ${color === 'w' ? 'bg-[#f7f7f4] border-[#bfc1c2]' : 'bg-[#202226] border-black'
+            }`}
         />
         <div className="flex flex-col min-w-0 flex-1">
           {playerName && (
@@ -62,20 +60,18 @@ export const GameClock: React.FC<GameClockProps> = ({
 
       <div className="flex items-center gap-1 font-mono text-sm xl:text-base font-bold shrink-0">
         <Clock
-          className={`w-3.5 h-3.5 ${
-            isActive ? (isLowTime ? 'text-red-500' : 'text-[#c6a45c]') : 'text-[#a7a8a5]'
-          }`}
+          className={`w-3.5 h-3.5 ${isActive ? (isLowTime ? 'text-red-500' : 'text-[#c6a45c]') : 'text-[#a7a8a5]'
+            }`}
         />
         <span
-          className={`${
-            isCritical
-              ? 'text-red-600'
-              : isLowTime
+          className={`${isCritical
+            ? 'text-red-600'
+            : isLowTime
               ? 'text-amber-600'
               : isActive
-              ? 'text-[#202226]'
-              : 'text-[#666762]'
-          }`}
+                ? 'text-[#202226]'
+                : 'text-[#666762]'
+            }`}
         >
           {formatTime(timeMs)}
         </span>
