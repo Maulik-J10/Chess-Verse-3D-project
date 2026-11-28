@@ -86,7 +86,6 @@ const RendererTuner: React.FC<{ useSoftShadows: boolean; graphicsQuality: string
 
 export const ChessRoom: React.FC = () => {
   const graphicsQuality = useGameStore((s) => s.graphicsQuality);
-  const gameMode = useGameStore((s) => s.gameMode);
   const isMobile = useGameStore((s) => s.isMobile);
   const setIsMobile = useGameStore((s) => s.setIsMobile);
   const [isTabVisible, setIsTabVisible] = useState(true);
@@ -196,14 +195,12 @@ export const ChessRoom: React.FC = () => {
   // Disable heavy MSAA on Performance ('low') and touch Balanced ('medium') to prevent tile-GPU stalls
   const useAntialias =
     graphicsQuality === 'high' || graphicsQuality === 'ultra' || (!isTouchOrMobile && graphicsQuality !== 'low');
-  // Use demand rendering on Menu, Performance ('low'), and Balanced ('medium') so idle scenes burn 0 GPU cycles
-  // while active gestures, piece moves, AI moves, and camera transitions wake instantaneously via invalidate().
-  const useDemandLoop = gameMode === 'menu' || graphicsQuality === 'low' || graphicsQuality === 'medium';
-
+  // Demand rendering across ALL tiers eliminates idle GPU queue saturation & keeps click interactions < 50ms
+  // while camera orbit, transitions, piece damp animations, and chandelier dimming wake instantaneously via invalidate().
   return (
     <div className="absolute inset-0 w-full h-full select-none overflow-hidden bg-[#141518] touch-none">
       <Canvas
-        frameloop={!isTabVisible || contextLost ? 'never' : useDemandLoop ? 'demand' : 'always'}
+        frameloop={!isTabVisible || contextLost ? 'never' : 'demand'}
         shadows={shadowEnabled}
         dpr={dpr}
         camera={{ position: [0, 4.25, 7.6], fov: 56, near: 0.25, far: 85 }}

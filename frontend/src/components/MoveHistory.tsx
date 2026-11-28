@@ -49,7 +49,7 @@ export const MoveHistory: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col bg-[#f7f7f4]/95 backdrop-blur-md border border-[#c6a45c]/35 rounded-2xl overflow-hidden shadow-royal-card w-full text-xs text-[#202226]">
+    <div className="flex flex-col bg-[#f7f7f4]/[0.97] border border-[#c6a45c]/35 rounded-2xl overflow-hidden shadow-royal-card w-full text-xs text-[#202226]">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#c6a45c]/20 bg-[#eeede8]/60">
         <div className="flex items-center gap-1.5 font-serif font-bold text-[#202226]">
@@ -61,11 +61,10 @@ export const MoveHistory: React.FC = () => {
         {/* Live Status indicator */}
         <button
           onClick={() => setHistoryIndex(-1)}
-          className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold transition-all ${
-            isLive
-              ? 'bg-[#c6a45c]/20 text-[#202226] border border-[#c6a45c]/40 font-bold'
-              : 'bg-amber-100 text-amber-800 border border-amber-400 animate-pulse hover:bg-amber-200 cursor-pointer'
-          }`}
+          className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold transition-all ${isLive
+            ? 'bg-[#c6a45c]/20 text-[#202226] border border-[#c6a45c]/40 font-bold'
+            : 'bg-amber-100 text-amber-800 border border-amber-400 animate-pulse hover:bg-amber-200 cursor-pointer'
+            }`}
         >
           <Play className="w-2.5 h-2.5 fill-current text-[#c6a45c]" />
           {isLive ? 'LIVE' : 'JUMP TO LIVE'}
@@ -99,11 +98,10 @@ export const MoveHistory: React.FC = () => {
               {pair.white && (
                 <button
                   onClick={() => setHistoryIndex(pair.white!.idx)}
-                  className={`flex-1 text-left px-2 py-0.5 rounded transition-colors font-medium flex items-center justify-between ${
-                    historyIndex === pair.white.idx
-                      ? 'bg-[#c6a45c]/25 text-[#202226] font-bold border border-[#c6a45c]'
-                      : 'text-[#202226] hover:bg-black/5'
-                  }`}
+                  className={`flex-1 text-left px-2 py-0.5 rounded transition-colors font-medium flex items-center justify-between ${historyIndex === pair.white.idx
+                    ? 'bg-[#c6a45c]/25 text-[#202226] font-bold border border-[#c6a45c]'
+                    : 'text-[#202226] hover:bg-black/5'
+                    }`}
                 >
                   <span>{pair.white.san}</span>
                   {badgeForPly(pair.white.idx)}
@@ -114,11 +112,10 @@ export const MoveHistory: React.FC = () => {
               {pair.black ? (
                 <button
                   onClick={() => setHistoryIndex(pair.black!.idx)}
-                  className={`flex-1 text-left px-2 py-0.5 rounded transition-colors font-medium flex items-center justify-between ${
-                    historyIndex === pair.black.idx
-                      ? 'bg-[#c6a45c]/25 text-[#202226] font-bold border border-[#c6a45c]'
-                      : 'text-[#666762] hover:text-[#202226] hover:bg-black/5'
-                  }`}
+                  className={`flex-1 text-left px-2 py-0.5 rounded transition-colors font-medium flex items-center justify-between ${historyIndex === pair.black.idx
+                    ? 'bg-[#c6a45c]/25 text-[#202226] font-bold border border-[#c6a45c]'
+                    : 'text-[#666762] hover:text-[#202226] hover:bg-black/5'
+                    }`}
                 >
                   <span>{pair.black.san}</span>
                   {badgeForPly(pair.black.idx)}

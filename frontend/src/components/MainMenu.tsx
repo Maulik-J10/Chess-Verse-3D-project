@@ -1,19 +1,19 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { soundManager } from '../audio/soundManager';
-import { 
-  AIDifficulty, 
-  AI_DIFFICULTIES, 
-  TIME_CONTROLS, 
-  TimeControlPreset 
+import {
+  AIDifficulty,
+  AI_DIFFICULTIES,
+  TIME_CONTROLS,
+  TimeControlPreset
 } from '../chess/types';
-import { 
-  Bot, 
-  Users, 
-  BookOpen, 
-  Settings, 
-  Play, 
-  Check, 
+import {
+  Bot,
+  Users,
+  BookOpen,
+  Settings,
+  Play,
+  Check,
   ChevronRight,
   X
 } from 'lucide-react';
@@ -93,12 +93,13 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenRules 
       <div className="pointer-events-auto flex flex-col gap-2 sm:gap-3 w-full max-w-xs sm:max-w-sm mx-auto sm:mx-0 animate-fade-in mt-3 sm:mt-6 mb-1 sm:mb-4 shrink-0">
         {/* PLAY VS COMPUTER */}
         <button
+          onPointerDown={() => soundManager.unlockAudio()}
           onClick={() => {
             soundManager.unlockAudio();
             soundManager.playClick();
             setShowAiSetup(true);
           }}
-          className="group relative flex items-center justify-between p-3 sm:p-4 rounded-2xl bg-[#f7f7f4]/95 lg:backdrop-blur-md border border-[#c6a45c]/35 hover:border-[#c6a45c] hover:bg-white transition-all duration-300 shadow-royal-card active:scale-95 cursor-pointer min-h-[48px]"
+          className="group relative flex items-center justify-between p-3 sm:p-4 rounded-2xl bg-[#f7f7f4]/95 border border-[#c6a45c]/35 hover:border-[#c6a45c] hover:bg-white transition-all duration-300 shadow-royal-card active:scale-95 cursor-pointer min-h-[48px]"
         >
           <div className="flex items-center gap-3">
             <div className="p-2 sm:p-2.5 rounded-xl bg-[#c6a45c]/15 border border-[#c6a45c]/30 text-[#c6a45c] group-hover:scale-110 transition-transform">
@@ -118,8 +119,9 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenRules 
 
         {/* PLAY WITH FRIEND */}
         <button
+          onPointerDown={() => soundManager.unlockAudio()}
           onClick={handleOpenMultiplayer}
-          className="group relative flex items-center justify-between p-3 sm:p-4 rounded-2xl bg-[#f7f7f4]/95 lg:backdrop-blur-md border border-[#c6a45c]/35 hover:border-[#c6a45c] hover:bg-white transition-all duration-300 shadow-royal-card active:scale-95 cursor-pointer min-h-[48px]"
+          className="group relative flex items-center justify-between p-3 sm:p-4 rounded-2xl bg-[#f7f7f4]/95 border border-[#c6a45c]/35 hover:border-[#c6a45c] hover:bg-white transition-all duration-300 shadow-royal-card active:scale-95 cursor-pointer min-h-[48px]"
         >
           <div className="flex items-center gap-3">
             <div className="p-2 sm:p-2.5 rounded-xl bg-[#666762]/10 border border-[#666762]/25 text-[#202226] group-hover:scale-110 transition-transform">
@@ -172,11 +174,10 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenRules 
                       key={c.id}
                       type="button"
                       onClick={() => setSelectedColor(c.id as any)}
-                      className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
-                        selectedColor === c.id
-                          ? 'bg-[#c6a45c]/15 border-[#c6a45c] text-[#202226] shadow-sm font-bold'
-                          : 'bg-white border-[#d6d6d2] text-[#666762] hover:border-[#c6a45c]/60'
-                      }`}
+                      className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${selectedColor === c.id
+                        ? 'bg-[#c6a45c]/15 border-[#c6a45c] text-[#202226] shadow-sm font-bold'
+                        : 'bg-white border-[#d6d6d2] text-[#666762] hover:border-[#c6a45c]/60'
+                        }`}
                     >
                       <div className="font-serif font-bold text-sm text-[#202226]">{c.label}</div>
                       <div className="text-[10px] text-[#a7a8a5] mt-0.5">{c.sub}</div>
@@ -199,11 +200,10 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenRules 
                         key={diff}
                         type="button"
                         onClick={() => setSelectedDifficulty(diff)}
-                        className={`w-full p-2.5 rounded-xl text-left border flex items-center justify-between transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-[#c6a45c]/15 border-[#c6a45c] text-[#202226] shadow-sm'
-                            : 'bg-white border-[#d6d6d2] text-[#666762] hover:border-[#c6a45c]/60'
-                        }`}
+                        className={`w-full p-2.5 rounded-xl text-left border flex items-center justify-between transition-all cursor-pointer ${isSelected
+                          ? 'bg-[#c6a45c]/15 border-[#c6a45c] text-[#202226] shadow-sm'
+                          : 'bg-white border-[#d6d6d2] text-[#666762] hover:border-[#c6a45c]/60'
+                          }`}
                       >
                         <div>
                           <div className="flex items-center gap-2">
@@ -232,11 +232,10 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenRules 
                       key={tc.id}
                       type="button"
                       onClick={() => setSelectedTimeControl(tc)}
-                      className={`p-2.5 rounded-xl text-center border transition-all cursor-pointer ${
-                        selectedTimeControl.id === tc.id
-                          ? 'bg-[#c6a45c]/15 border-[#c6a45c] text-[#202226] font-bold shadow-sm'
-                          : 'bg-white border-[#d6d6d2] text-[#666762] hover:border-[#c6a45c]/60'
-                      }`}
+                      className={`p-2.5 rounded-xl text-center border transition-all cursor-pointer ${selectedTimeControl.id === tc.id
+                        ? 'bg-[#c6a45c]/15 border-[#c6a45c] text-[#202226] font-bold shadow-sm'
+                        : 'bg-white border-[#d6d6d2] text-[#666762] hover:border-[#c6a45c]/60'
+                        }`}
                     >
                       <div className="font-bold text-[#202226]">{tc.name}</div>
                       <div className="text-[10px] text-[#a7a8a5] capitalize">{tc.category}</div>

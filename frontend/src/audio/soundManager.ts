@@ -32,6 +32,13 @@ class SoundManager {
 
   public unlockAudio() {
     this.initContext();
+    if (this.ctx && !this.cachedNoiseBuffer) {
+      try {
+        this.createNoiseBuffer(0.03);
+      } catch {
+        // Safe fallback if context blocked prior to user gesture
+      }
+    }
   }
 
   public getLastAudioEvent() {

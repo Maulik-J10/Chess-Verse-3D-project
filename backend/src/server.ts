@@ -13,21 +13,42 @@ import { registerGameEvents } from './socket/gameEvents.js';
 dotenv.config();
 
 const app = express();
-const port = process.env.PORT || 4000;
+app.set('trust proxy', 1);
+const port = Number(process.env.PORT) || 4000;
 
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST'],
-}));
+function parseCorsOrigins(raw: string | undefined): string | string[] {
+  const val = (raw || '*').trim();
+  if (!val || val === '*') return '*';
+  const origins = val
+    .split(',')
+    .map((o) => o.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+  return origins.length <= 1 ? (origins[0] || '*') : origins;
+}
+
+const allowedCorsOrigin = parseCorsOrigins(process.env.CORS_ORIGIN);
+
+app.use(
+  cors({
+    origin: allowedCorsOrigin,
+    methods: ['GET', 'POST', 'OPTIONS'],
+    credentials: allowedCorsOrigin !== '*',
+  })
+);
 app.use(express.json());
 
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: allowedCorsOrigin,
     methods: ['GET', 'POST'],
+    credentials: allowedCorsOrigin !== '*',
   },
+  transports: ['websocket', 'polling'],
+  allowUpgrades: true,
+  perMessageDeflate: false,
+  httpCompression: true,
   pingTimeout: 30000,
   pingInterval: 10000,
 });
@@ -36,13 +57,28 @@ const roomService = new RoomService();
 const gameService = new GameService();
 const rateLimiter = new RateLimiter(100, 60000);
 
-// API Health Check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'The Grand Chess Room Multiplayer API', timestamp: Date.now() });
+// Readiness & API Health Check
+app.get('/', (_req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'ChessVerse 3D Multiplayer Server',
+    websocket: '/socket.io/',
+    timestamp: Date.now(),
+  });
+});
+
+app.get('/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'The Grand Chess Room Multiplayer API',
+    activeRooms: roomService.getActiveRooms().length,
+    uptimeSec: Math.round(process.uptime()),
+    timestamp: Date.now(),
+  });
 });
 
 // Periodic Clock Watchdog, Rate-Limiter Pruning & Expired Room Cleanup (every 1 second)
-setInterval(() => {
+const watchdogTimer = setInterval(() => {
   rateLimiter.cleanup();
   roomService.cleanupExpiredRooms((removedRoomId) => {
     gameService.removeGame(removedRoomId);
@@ -72,8 +108,19 @@ io.on('connection', (socket) => {
 });
 
 server.listen(port, () => {
-  console.log(`[The Grand Chess Room] Server running at http://localhost:${port}`);
+  console.log(`[The Grand Chess Room] Server running on port ${port}`);
 });
+
+const shutdownGracefully = () => {
+  clearInterval(watchdogTimer);
+  io.close(() => {
+    server.close(() => process.exit(0));
+  });
+  setTimeout(() => process.exit(0), 2500).unref();
+};
+
+process.on('SIGTERM', shutdownGracefully);
+process.on('SIGINT', shutdownGracefully);
 
 export { app, server, roomService, gameService };
 

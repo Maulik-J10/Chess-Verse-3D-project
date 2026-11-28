@@ -6,18 +6,18 @@ import { CapturedPieces } from './CapturedPieces';
 import { ThinkingIndicator } from './ThinkingIndicator';
 import { MoveHistory } from './MoveHistory';
 import { CheckmateReviewPanel } from './CheckmateReviewPanel';
-import { 
-  RotateCcw, 
-  Flag, 
-  Handshake, 
-  Undo2, 
-  Volume2, 
-  VolumeX, 
-  Home, 
-  RefreshCw, 
-  Users, 
-  Bot, 
-  Copy, 
+import {
+  RotateCcw,
+  Flag,
+  Handshake,
+  Undo2,
+  Volume2,
+  VolumeX,
+  Home,
+  RefreshCw,
+  Users,
+  Bot,
+  Copy,
   Check,
   Camera,
   History,
@@ -118,13 +118,13 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenRules })
 
   return (
     <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-2 sm:p-5 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] select-none z-20 overflow-hidden">
-      
+
       {/* ============================================================== */}
       {/* TOP BAR (DESKTOP: lg+) */}
       {/* ============================================================== */}
       <header className="pointer-events-auto hidden lg:flex items-center justify-between gap-3 w-full px-1 xl:px-3">
         {/* Game Mode & Title Badge */}
-        <div className="flex items-center gap-3 bg-[#f7f7f4]/95 backdrop-blur-md px-4 py-2 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
+        <div className="flex items-center gap-3 bg-[#f7f7f4]/[0.97] px-4 py-2 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
           <button
             onClick={returnToMenu}
             className="flex items-center gap-1.5 text-xs text-[#666762] hover:text-[#202226] transition-colors cursor-pointer"
@@ -168,22 +168,21 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenRules })
           {isThinking ? (
             <ThinkingIndicator difficulty={difficulty} />
           ) : isGameOver ? (
-            <div className="px-3.5 py-1.5 rounded-full text-xs font-serif font-bold backdrop-blur-md border border-[#c6a45c] bg-[#f7f7f4]/95 text-[#202226] shadow-royal-card flex items-center gap-2">
+            <div className="px-3.5 py-1.5 rounded-full text-xs font-serif font-bold border border-[#c6a45c] bg-[#f7f7f4]/[0.97] text-[#202226] shadow-royal-card flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-[#c6a45c]" />
               <span>{isReviewingGame ? `Review Mode — ${gameResultTitle}` : gameResultTitle || 'Game Over'}</span>
             </div>
           ) : (
             <div
-              className={`px-3.5 py-1.5 rounded-full text-xs font-serif font-bold backdrop-blur-md border shadow-royal-card flex items-center gap-2 ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-serif font-bold border shadow-royal-card flex items-center gap-2 ${
                 isMyTurn
-                  ? 'bg-[#f7f7f4]/95 border-[#c6a45c] text-[#202226] shadow-glow-gold'
-                  : 'bg-[#f7f7f4]/95 border-[#d6d6d2] text-[#666762]'
+                  ? 'bg-[#f7f7f4]/[0.97] border-[#c6a45c] text-[#202226] shadow-glow-gold'
+                  : 'bg-[#f7f7f4]/[0.97] border-[#d6d6d2] text-[#666762]'
               }`}
             >
               <span
-                className={`w-2.5 h-2.5 rounded-full ${
-                  turn === 'w' ? 'bg-[#f7f7f4] border border-[#bfc1c2]' : 'bg-[#202226]'
-                }`}
+                className={`w-2.5 h-2.5 rounded-full ${turn === 'w' ? 'bg-[#f7f7f4] border border-[#bfc1c2]' : 'bg-[#202226]'
+                  }`}
               />
               <span>{isMyTurn ? 'Your Turn to Move' : "Opponent's Turn"}</span>
             </div>
@@ -191,7 +190,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenRules })
         </div>
 
         {/* Quick Settings, Rules & Audio */}
-        <div className="flex items-center gap-1.5 bg-[#f7f7f4]/95 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
+        <div className="flex items-center gap-1.5 bg-[#f7f7f4]/[0.97] px-3 py-1.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card">
           <button
             onClick={toggleSound}
             className="p-1.5 rounded-lg text-[#666762] hover:text-[#202226] hover:bg-black/5 transition-colors cursor-pointer"
@@ -246,9 +245,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenRules })
           {/* Turn indicator */}
           <div className="flex items-center gap-1 px-2 py-0.5 sm:py-1 rounded-full bg-white/90 border border-[#c6a45c]/30 text-[10px] sm:text-[11px] font-serif font-bold whitespace-nowrap">
             <span
-              className={`w-2 h-2 rounded-full shrink-0 ${
-                turn === 'w' ? 'bg-white border border-[#999]' : 'bg-[#202226]'
-              }`}
+              className={`w-2 h-2 rounded-full shrink-0 ${turn === 'w' ? 'bg-white border border-[#999]' : 'bg-[#202226]'
+                }`}
             />
             <span className={isMyTurn ? 'text-[#c6a45c]' : 'text-[#666762]'}>
               {isThinking ? 'Thinking...' : isMyTurn ? 'Your Turn' : 'AI Turn'}
@@ -312,9 +310,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenRules })
         <div className="flex items-center justify-between gap-2 bg-[#f7f7f4]/95 px-3 py-1.5 rounded-xl border border-[#c6a45c]/25 shadow-sm">
           <div className="flex items-center gap-2 min-w-0">
             <div
-              className={`w-3 h-3 rounded-full shrink-0 border ${
-                playerColor === 'w' ? 'bg-[#202226] border-black' : 'bg-white border-[#ccc]'
-              }`}
+              className={`w-3 h-3 rounded-full shrink-0 border ${playerColor === 'w' ? 'bg-[#202226] border-black' : 'bg-white border-[#ccc]'
+                }`}
             />
             <span className="font-serif font-bold text-xs text-[#202226] truncate">
               {opponentName}
@@ -344,7 +341,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenRules })
         {/* Left Player Cards / Clocks */}
         <div className="pointer-events-auto flex flex-col gap-3 w-52 xl:w-60 shrink-0">
           {/* Opponent Card (Top) */}
-          <div className="bg-[#f7f7f4]/95 backdrop-blur-md border border-[#c6a45c]/35 rounded-2xl p-3 shadow-royal-card">
+          <div className="bg-[#f7f7f4]/[0.97] border border-[#c6a45c]/35 rounded-2xl p-3 shadow-royal-card">
             <GameClock
               color={playerColor === 'w' ? 'b' : 'w'}
               isActive={turn !== playerColor}
@@ -359,7 +356,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenRules })
           </div>
 
           {/* User Player Card (Bottom) */}
-          <div className="bg-[#f7f7f4]/95 backdrop-blur-md border border-[#c6a45c]/35 rounded-2xl p-3 shadow-royal-card">
+          <div className="bg-[#f7f7f4]/[0.97] border border-[#c6a45c]/35 rounded-2xl p-3 shadow-royal-card">
             <GameClock
               color={playerColor}
               isActive={turn === playerColor}
@@ -408,7 +405,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenRules })
           <MoveHistory />
 
           {/* Camera View Presets */}
-          <div className="bg-[#f7f7f4]/95 backdrop-blur-md border border-[#c6a45c]/35 rounded-2xl p-2 shadow-royal-card text-[#202226]">
+          <div className="bg-[#f7f7f4]/[0.97] border border-[#c6a45c]/35 rounded-2xl p-2 shadow-royal-card text-[#202226]">
             <div className="flex items-center gap-1.5 text-xs text-[#666762] font-serif font-bold mb-1.5 px-1">
               <Camera className="w-3.5 h-3.5 text-[#c6a45c]" />
               <span>Camera Views</span>
@@ -418,11 +415,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenRules })
                 <button
                   key={btn.preset}
                   onClick={() => setCameraPreset(btn.preset)}
-                  className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${
-                    cameraPreset === btn.preset
-                      ? 'bg-[#c6a45c] text-white font-bold shadow-sm'
-                      : 'bg-white hover:bg-[#c6a45c]/10 text-[#202226] border border-[#d6d6d2]'
-                  }`}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${cameraPreset === btn.preset
+                    ? 'bg-[#c6a45c] text-white font-bold shadow-sm'
+                    : 'bg-white hover:bg-[#c6a45c]/10 text-[#202226] border border-[#d6d6d2]'
+                    }`}
                 >
                   {btn.label}
                 </button>
@@ -435,7 +431,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenRules })
       {/* ============================================================== */}
       {/* BOTTOM ACTION BAR (DESKTOP: lg+) */}
       {/* ============================================================== */}
-      <footer className="pointer-events-auto hidden lg:flex items-center justify-between w-full px-3 xl:px-4 gap-2 bg-[#f7f7f4]/95 backdrop-blur-md py-2.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card text-xs">
+      <footer className="pointer-events-auto hidden lg:flex items-center justify-between w-full px-3 xl:px-4 gap-2 bg-[#f7f7f4]/[0.97] py-2.5 rounded-2xl border border-[#c6a45c]/35 shadow-royal-card text-xs">
         {/* Left Side Game Actions */}
         <div className="flex items-center gap-2">
           {gameMode === 'ai' && (
@@ -547,9 +543,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenRules })
         <div className="flex items-center justify-between gap-2 bg-[#f7f7f4]/95 px-3 py-1.5 rounded-xl border border-[#c6a45c]/35 shadow-royal-card">
           <div className="flex items-center gap-2 min-w-0">
             <div
-              className={`w-3 h-3 rounded-full shrink-0 border ${
-                playerColor === 'w' ? 'bg-white border-[#ccc]' : 'bg-[#202226] border-black'
-              }`}
+              className={`w-3 h-3 rounded-full shrink-0 border ${playerColor === 'w' ? 'bg-white border-[#ccc]' : 'bg-[#202226] border-black'
+                }`}
             />
             <span className="font-serif font-bold text-xs text-[#202226]">
               You ({playerColor === 'w' ? 'White' : 'Black'})
@@ -647,11 +642,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({ onOpenSettings, onOpenRules })
                     soundManager.playClick();
                     setShowMobileCamera(false);
                   }}
-                  className={`h-11 rounded-xl text-xs font-serif font-bold transition-all cursor-pointer flex items-center justify-center ${
-                    cameraPreset === btn.preset
-                      ? 'bg-[#c6a45c] text-white shadow-glow-gold'
-                      : 'bg-white border border-[#d6d6d2] text-[#202226] active:bg-[#c6a45c]/10'
-                  }`}
+                  className={`h-11 rounded-xl text-xs font-serif font-bold transition-all cursor-pointer flex items-center justify-center ${cameraPreset === btn.preset
+                    ? 'bg-[#c6a45c] text-white shadow-glow-gold'
+                    : 'bg-white border border-[#d6d6d2] text-[#202226] active:bg-[#c6a45c]/10'
+                    }`}
                 >
                   {btn.label}
                 </button>

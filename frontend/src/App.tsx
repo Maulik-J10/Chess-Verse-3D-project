@@ -1,21 +1,55 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { ChessRoom } from './scenes/ChessRoom';
 import { MainMenu } from './components/MainMenu';
-import { GameHUD } from './components/GameHUD';
-import { RoomLobby } from './components/RoomLobby';
-import { GameResult } from './components/GameResult';
-import { PawnPromotionModal } from './components/PawnPromotionModal';
-import { SettingsModal } from './components/SettingsModal';
-import { RulesModal } from './components/RulesModal';
 import { Preloader } from './components/Preloader';
-import { PerformanceOverlay } from './components/PerformanceOverlay';
 import { useGameStore } from './store/gameStore';
+
+const loadRoomLobby = () => import('./components/RoomLobby').then((m) => ({ default: m.RoomLobby }));
+const loadGameHUD = () => import('./components/GameHUD').then((m) => ({ default: m.GameHUD }));
+const loadGameResult = () => import('./components/GameResult').then((m) => ({ default: m.GameResult }));
+const loadPawnPromotionModal = () =>
+  import('./components/PawnPromotionModal').then((m) => ({ default: m.PawnPromotionModal }));
+const loadSettingsModal = () => import('./components/SettingsModal').then((m) => ({ default: m.SettingsModal }));
+const loadRulesModal = () => import('./components/RulesModal').then((m) => ({ default: m.RulesModal }));
+const loadPerformanceOverlay = () =>
+  import('./components/PerformanceOverlay').then((m) => ({ default: m.PerformanceOverlay }));
+
+const RoomLobby = lazy(loadRoomLobby);
+const GameHUD = lazy(loadGameHUD);
+const GameResult = lazy(loadGameResult);
+const PawnPromotionModal = lazy(loadPawnPromotionModal);
+const SettingsModal = lazy(loadSettingsModal);
+const RulesModal = lazy(loadRulesModal);
+const PerformanceOverlay = lazy(loadPerformanceOverlay);
 
 export const App: React.FC = () => {
   const gameMode = useGameStore((s) => s.gameMode);
+  const showPerfOverlay = useGameStore((s) => s.showPerfOverlay);
+  const isOver = useGameStore((s) => !!s.gameResult?.isOver);
+  const hasPromo = useGameStore((s) => !!s.promotionPending);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
+
+  // Idle-prefetch secondary UI chunks right after startup so modal & match clicks are instant
+  useEffect(() => {
+    const prefetch = () => {
+      loadGameHUD();
+      loadRoomLobby();
+      loadSettingsModal();
+      loadRulesModal();
+    };
+    const w = window as unknown as {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (typeof w.requestIdleCallback === 'function') {
+      const id = w.requestIdleCallback(prefetch, { timeout: 1200 });
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const timer = window.setTimeout(prefetch, 600);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   return (
     <div className="relative w-screen h-[100dvh] overflow-hidden bg-[#121316]">
@@ -33,23 +67,23 @@ export const App: React.FC = () => {
         />
       )}
 
-      {/* Screen Layer: Online Multiplayer Lobby (Create / Join Room) */}
-      {gameMode === 'lobby' && <RoomLobby />}
+      {/* Lazy-Loaded Game Screens & Overlays */}
+      <Suspense fallback={null}>
+        {gameMode === 'lobby' && <RoomLobby />}
 
-      {/* Screen Layer: Active Game HUD (AI or Online Multiplayer) */}
-      {(gameMode === 'ai' || gameMode === 'friend') && (
-        <GameHUD
-          onOpenSettings={() => setIsSettingsOpen(true)}
-          onOpenRules={() => setIsRulesOpen(true)}
-        />
-      )}
+        {(gameMode === 'ai' || gameMode === 'friend') && (
+          <GameHUD
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            onOpenRules={() => setIsRulesOpen(true)}
+          />
+        )}
 
-      {/* Overlays and Modals */}
-      <PerformanceOverlay />
-      <PawnPromotionModal />
-      <GameResult />
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
-      <RulesModal isOpen={isRulesOpen} onClose={() => setIsRulesOpen(false)} />
+        {showPerfOverlay && <PerformanceOverlay />}
+        {hasPromo && <PawnPromotionModal />}
+        {isOver && <GameResult />}
+        {isSettingsOpen && <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />}
+        {isRulesOpen && <RulesModal isOpen={isRulesOpen} onClose={() => setIsRulesOpen(false)} />}
+      </Suspense>
     </div>
   );
 };

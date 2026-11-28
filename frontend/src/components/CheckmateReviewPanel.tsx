@@ -19,7 +19,7 @@ export const CheckmateReviewPanel: React.FC<CheckmateReviewPanelProps> = ({ comp
 
   return (
     <div
-      className={`bg-[#f7f7f4]/95 backdrop-blur-md border border-[#c6a45c]/50 rounded-2xl shadow-royal-card text-[#202226] ${
+      className={`bg-[#f7f7f4]/[0.97] border border-[#c6a45c]/50 rounded-2xl shadow-royal-card text-[#202226] ${
         compact ? 'p-3 text-[11px]' : 'p-3.5 text-xs'
       }`}
     >

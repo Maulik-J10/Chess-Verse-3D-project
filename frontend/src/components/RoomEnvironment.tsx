@@ -48,55 +48,53 @@ function getChevronWallpaperTexture(): THREE.CanvasTexture | null {
   ctx.fillStyle = '#EDE9E1';
   ctx.fillRect(0, 0, TILE, TILE);
 
-  // Subtle repeating staggered double-chevron downward arrow pattern matching reference image
-  const cols = 6;
+  // Alternating vertical columns of crisp double-chevron downward arrows
+  // Navy Blue (#18243A) and Slate Grey (#737985) matching the reference wallpaper
+  const cols = 6; // Even count ensures seamless horizontal alternation across tile edges
   const rows = 8;
   const colStep = TILE / cols;
   const rowStep = TILE / rows;
 
-  const drawDoubleChevron = (cx: number, cy: number, outerColor: string, innerColor: string) => {
-    const hw = 18;
-    const armTopY = -20;
-    const tipY = 12;
+  const navyPath = new Path2D();
+  const greyPath = new Path2D();
 
-    // Lower / outer crisp chevron V
-    ctx.strokeStyle = outerColor;
-    ctx.lineWidth = 3.2;
-    ctx.lineCap = 'butt';
-    ctx.lineJoin = 'miter';
-    ctx.beginPath();
-    ctx.moveTo(cx - hw, cy + armTopY);
-    ctx.lineTo(cx, cy + tipY);
-    ctx.lineTo(cx + hw, cy + armTopY);
-    ctx.stroke();
+  const appendDoubleChevron = (target: Path2D, cx: number, cy: number) => {
+    // Lower crisp chevron V
+    const hw = 23;
+    const armTopY = -16;
+    const tipY = 22;
+    target.moveTo(cx - hw, cy + armTopY);
+    target.lineTo(cx, cy + tipY);
+    target.lineTo(cx + hw, cy + armTopY);
 
-    // Upper / nested secondary chevron V
-    const ihw = 15.5;
-    const iTopY = -34;
-    const iTipY = -3.5;
-    ctx.strokeStyle = innerColor;
-    ctx.lineWidth = 2.8;
-    ctx.beginPath();
-    ctx.moveTo(cx - ihw, cy + iTopY);
-    ctx.lineTo(cx, cy + iTipY);
-    ctx.lineTo(cx + ihw, cy + iTopY);
-    ctx.stroke();
+    // Upper nested secondary chevron V
+    const ihw = 19.5;
+    const iTopY = -35;
+    const iTipY = 1;
+    target.moveTo(cx - ihw, cy + iTopY);
+    target.lineTo(cx, cy + iTipY);
+    target.lineTo(cx + ihw, cy + iTopY);
   };
 
   for (let r = -1; r <= rows; r++) {
     const cy = (r + 0.5) * rowStep;
-    const staggerX = Math.abs(r) % 2 === 1 ? colStep * 0.5 : 0;
     for (let c = -1; c <= cols + 1; c++) {
-      const cx = c * colStep + colStep * 0.5 + staggerX;
-      // Alternating columns create diagonal dark-navy (#18243A/#303C50) & muted slate-grey (#737985) cadence
-      const isPrimaryDark = (((c % 2) + 2) % 2 === 0);
-      const outer = isPrimaryDark ? '#18243A' : '#737985';
-      const inner = isPrimaryDark ? '#303C50' : '#737985';
-      if (cx > -40 && cx < TILE + 40 && cy > -50 && cy < TILE + 50) {
-        drawDoubleChevron(cx, cy, outer, inner);
+      const cx = c * colStep + colStep * 0.5;
+      if (cx > -45 && cx < TILE + 45 && cy > -55 && cy < TILE + 55) {
+        const isNavy = (((c % 2) + 2) % 2 === 0);
+        appendDoubleChevron(isNavy ? navyPath : greyPath, cx, cy);
       }
     }
   }
+
+  ctx.lineCap = 'butt';
+  ctx.lineJoin = 'miter';
+  ctx.lineWidth = 5.4;
+  ctx.strokeStyle = '#18243A';
+  ctx.stroke(navyPath);
+
+  ctx.strokeStyle = '#737985';
+  ctx.stroke(greyPath);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
@@ -482,19 +480,20 @@ const RoyalDesignerRug: React.FC<{ receiveShadow: boolean }> = ({ receiveShadow 
 
     const gridStep = res <= 512 ? 48 : 24;
     ctx.fillStyle = 'rgba(180, 170, 155, 0.16)';
+    const gridPath = new Path2D();
     for (let i = 0; i < 2048; i += gridStep) {
-      ctx.fillRect(i, 0, 3, 2048);
-      ctx.fillRect(0, i, 2048, 3);
+      gridPath.rect(i, 0, 3, 2048);
+      gridPath.rect(0, i, 2048, 3);
     }
+    ctx.fill(gridPath);
 
-    const drawFringes = (yStart: number) => {
-      ctx.fillStyle = '#f7f4ed';
-      for (let x = 60; x < 1988; x += 20) {
-        ctx.fillRect(x, yStart, 4, 30);
-      }
-    };
-    drawFringes(10);
-    drawFringes(2008);
+    ctx.fillStyle = '#f7f4ed';
+    const fringePath = new Path2D();
+    for (let x = 60; x < 1988; x += 20) {
+      fringePath.rect(x, 10, 4, 30);
+      fringePath.rect(x, 2008, 4, 30);
+    }
+    ctx.fill(fringePath);
 
     ctx.strokeStyle = '#281a14';
     ctx.lineWidth = 34;
@@ -512,14 +511,16 @@ const RoyalDesignerRug: React.FC<{ receiveShadow: boolean }> = ({ receiveShadow 
 
     ctx.strokeStyle = '#d4aa50';
     ctx.lineWidth = 3.5;
+    const outerKeyPath = new Path2D();
     for (let x = 120; x < 1920; x += 48) {
-      ctx.strokeRect(x, 118, 24, 52);
-      ctx.strokeRect(x, 1876, 24, 52);
+      outerKeyPath.rect(x, 118, 24, 52);
+      outerKeyPath.rect(x, 1876, 24, 52);
     }
     for (let y = 120; y < 1920; y += 48) {
-      ctx.strokeRect(118, y, 52, 24);
-      ctx.strokeRect(1876, y, 52, 24);
+      outerKeyPath.rect(118, y, 52, 24);
+      outerKeyPath.rect(1876, y, 52, 24);
     }
+    ctx.stroke(outerKeyPath);
 
     ctx.strokeStyle = '#c6a45c';
     ctx.lineWidth = 7;
@@ -568,17 +569,14 @@ const RoyalDesignerRug: React.FC<{ receiveShadow: boolean }> = ({ receiveShadow 
 
     ctx.strokeStyle = 'rgba(212, 170, 80, 0.22)';
     ctx.lineWidth = 1.5;
+    const latticePath = new Path2D();
     for (let d = -1336; d < 2672; d += 96) {
-      ctx.beginPath();
-      ctx.moveTo(356 + d, 356);
-      ctx.lineTo(356 + d + 1336, 1692);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(356 + d, 1692);
-      ctx.lineTo(356 + d + 1336, 356);
-      ctx.stroke();
+      latticePath.moveTo(356 + d, 356);
+      latticePath.lineTo(356 + d + 1336, 1692);
+      latticePath.moveTo(356 + d, 1692);
+      latticePath.lineTo(356 + d + 1336, 356);
     }
+    ctx.stroke(latticePath);
 
     const drawSpandrel = (cx: number, cy: number, rot: number) => {
       ctx.save();
@@ -831,7 +829,24 @@ const CornerGoldRingChandelier: React.FC<CornerGoldRingChandelierProps> = ({ pos
 // ARCHITECTURAL WALL FEATURE (36m width x 16.8m height; chevron-arrow wallpaper ONLY on
 // the 8 empty flanking background wall bays outside the [-5.25, +5.25] central bay)
 // ==================================================================================
-const wallArchStatic = typeof document !== 'undefined' ? (() => {
+// Lazy-initialized singleton cache so module import never blocks the main thread
+let wallArchStaticCache: {
+  wallMat: THREE.MeshStandardMaterial;
+  pillarMat: THREE.MeshStandardMaterial;
+  walnutMat: THREE.MeshStandardMaterial;
+  goldMat: THREE.MeshStandardMaterial;
+  baseMat: THREE.MeshStandardMaterial;
+  backWallGeo: THREE.BufferGeometry;
+  pillarGeo: THREE.BufferGeometry;
+  columnsGeo: THREE.BufferGeometry;
+  goldTrimsGeo: THREE.BufferGeometry;
+  baseboardGeo: THREE.BufferGeometry;
+} | null = null;
+
+function getWallArchStatic() {
+  if (typeof document === 'undefined') return null;
+  if (wallArchStaticCache) return wallArchStaticCache;
+
   const arrowTex = getChevronWallpaperTexture();
   const wallMat = new THREE.MeshStandardMaterial({
     color: arrowTex ? '#ffffff' : '#EDE9E1',
@@ -852,7 +867,7 @@ const wallArchStatic = typeof document !== 'undefined' ? (() => {
   const wingPlane = new THREE.PlaneGeometry(wingWidth, ROOM_HEIGHT);
   const uvAttr = wingPlane.getAttribute('uv');
   for (let i = 0; i < uvAttr.count; i++) {
-    uvAttr.setXY(i, uvAttr.getX(i) * 3.0, uvAttr.getY(i) * 4.0);
+    uvAttr.setXY(i, uvAttr.getX(i) * 2.6, uvAttr.getY(i) * 3.2);
   }
   uvAttr.needsUpdate = true;
 
@@ -880,8 +895,20 @@ const wallArchStatic = typeof document !== 'undefined' ? (() => {
 
   const baseboardGeo = new THREE.BoxGeometry(ROOM_SIZE, 0.44, 0.1);
 
-  return { wallMat, pillarMat, walnutMat, goldMat, baseMat, backWallGeo, pillarGeo, columnsGeo, goldTrimsGeo, baseboardGeo };
-})() : null;
+  wallArchStaticCache = {
+    wallMat,
+    pillarMat,
+    walnutMat,
+    goldMat,
+    baseMat,
+    backWallGeo,
+    pillarGeo,
+    columnsGeo,
+    goldTrimsGeo,
+    baseboardGeo,
+  };
+  return wallArchStaticCache;
+}
 
 interface ArchitecturalWallProps {
   headingLine1: string;
@@ -904,6 +931,7 @@ const ArchitecturalWall: React.FC<ArchitecturalWallProps> = ({
   showWallSpot = false,
   showLampLight = false,
 }) => {
+  const wallArchStatic = React.useMemo(() => getWallArchStatic(), []);
   if (!wallArchStatic) return null;
 
   return (
@@ -997,6 +1025,12 @@ const EuropeanOakHardwoodFloor: React.FC<{ receiveShadow: boolean; detailedMater
     };
 
     const fibersPerPlank = res <= 512 ? 8 : 16;
+    const seamDarkPath = new Path2D();
+    const seamHiPath = new Path2D();
+    const bumpSeamPath = new Path2D();
+    const roughSeamPath = new Path2D();
+    const cathedralPath = new Path2D();
+
     for (let r = 0; r < numRows; r++) {
       const y = r * rowHeight;
       // Staggered irregular plank joints across tile boundaries
@@ -1062,11 +1096,8 @@ const EuropeanOakHardwoodFloor: React.FC<{ receiveShadow: boolean; detailedMater
           const cathCenter = x1 + pWidth * (0.25 + random() * 0.5);
           const cathY = y + rowHeight * (0.35 + random() * 0.3);
           for (let c = 8; c <= 30; c += 7) {
-            ctx.strokeStyle = 'rgba(62, 38, 17, 0.13)';
-            ctx.lineWidth = 1.1;
-            ctx.beginPath();
-            ctx.ellipse(cathCenter, cathY, c * 3.2, c * 0.65, 0, 0, Math.PI);
-            ctx.stroke();
+            cathedralPath.moveTo(cathCenter + c * 3.2, cathY);
+            cathedralPath.ellipse(cathCenter, cathY, c * 3.2, c * 0.65, 0, 0, Math.PI);
           }
         }
 
@@ -1087,58 +1118,50 @@ const EuropeanOakHardwoodFloor: React.FC<{ receiveShadow: boolean; detailedMater
 
         // Micro-beveled V-groove end joints (natural shadow + slight top specular edge)
         if (x1 > 0) {
-          ctx.strokeStyle = 'rgba(34, 20, 9, 0.52)';
-          ctx.lineWidth = 1.6;
-          ctx.beginPath();
-          ctx.moveTo(x1, y + 1);
-          ctx.lineTo(x1, y + rowHeight - 1);
-          ctx.stroke();
+          seamDarkPath.moveTo(x1, y + 1);
+          seamDarkPath.lineTo(x1, y + rowHeight - 1);
 
-          bCtx.strokeStyle = '#383838';
-          bCtx.lineWidth = 2.2;
-          bCtx.beginPath();
-          bCtx.moveTo(x1, y);
-          bCtx.lineTo(x1, y + rowHeight);
-          bCtx.stroke();
+          bumpSeamPath.moveTo(x1, y);
+          bumpSeamPath.lineTo(x1, y + rowHeight);
 
-          rCtx.strokeStyle = '#d4d4d4';
-          rCtx.lineWidth = 2.2;
-          rCtx.beginPath();
-          rCtx.moveTo(x1, y);
-          rCtx.lineTo(x1, y + rowHeight);
-          rCtx.stroke();
+          roughSeamPath.moveTo(x1, y);
+          roughSeamPath.lineTo(x1, y + rowHeight);
         }
       }
 
       // Horizontal beveled V-groove plank seam + faint highlight edge
-      ctx.strokeStyle = 'rgba(32, 18, 8, 0.52)';
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(1024, y);
-      ctx.stroke();
+      seamDarkPath.moveTo(0, y);
+      seamDarkPath.lineTo(1024, y);
 
-      ctx.strokeStyle = 'rgba(248, 224, 188, 0.09)';
-      ctx.lineWidth = 0.8;
-      ctx.beginPath();
-      ctx.moveTo(0, y + 1.4);
-      ctx.lineTo(1024, y + 1.4);
-      ctx.stroke();
+      seamHiPath.moveTo(0, y + 1.4);
+      seamHiPath.lineTo(1024, y + 1.4);
 
-      bCtx.strokeStyle = '#363636';
-      bCtx.lineWidth = 2.2;
-      bCtx.beginPath();
-      bCtx.moveTo(0, y);
-      bCtx.lineTo(1024, y);
-      bCtx.stroke();
+      bumpSeamPath.moveTo(0, y);
+      bumpSeamPath.lineTo(1024, y);
 
-      rCtx.strokeStyle = '#d4d4d4';
-      rCtx.lineWidth = 2.2;
-      rCtx.beginPath();
-      rCtx.moveTo(0, y);
-      rCtx.lineTo(1024, y);
-      rCtx.stroke();
+      roughSeamPath.moveTo(0, y);
+      roughSeamPath.lineTo(1024, y);
     }
+
+    ctx.strokeStyle = 'rgba(62, 38, 17, 0.13)';
+    ctx.lineWidth = 1.1;
+    ctx.stroke(cathedralPath);
+
+    ctx.strokeStyle = 'rgba(32, 18, 8, 0.52)';
+    ctx.lineWidth = 1.6;
+    ctx.stroke(seamDarkPath);
+
+    ctx.strokeStyle = 'rgba(248, 224, 188, 0.09)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke(seamHiPath);
+
+    bCtx.strokeStyle = '#363636';
+    bCtx.lineWidth = 2.2;
+    bCtx.stroke(bumpSeamPath);
+
+    rCtx.strokeStyle = '#d4d4d4';
+    rCtx.lineWidth = 2.2;
+    rCtx.stroke(roughSeamPath);
 
     const setupRepeatingTex = (c: HTMLCanvasElement, srgb: boolean) => {
       const tex = new THREE.CanvasTexture(c);

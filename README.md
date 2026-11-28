@@ -202,24 +202,25 @@ npm run build
 
 ## 🌐 Production Deployment
 
-### Frontend Deployment (Vercel / Netlify / Cloudflare Pages)
-1. Set the root or build directory to `frontend`.
+> **Important Architecture Note:** Vercel static/serverless hosting does **not** support persistent Socket.IO/WebSocket connections or stateful in-memory game rooms. Deploy `frontend/` to Vercel and deploy `backend/` separately to a persistent Node WebSocket host (Render, Railway, Fly.io, etc.), then set Vercel's `VITE_SOCKET_URL` to your deployed `https://` backend URL (never `http://localhost:4000`).
+
+### 1. Backend Deployment (Render Blueprint / Docker / Railway / Fly.io)
+- Using **Render**: Connect the GitHub repository (`render.yaml` at project root auto-configures `chessverse3d-backend` in `backend/` with `/health` check).
+- Using **Docker / Railway / Fly.io**: Build from [`backend/Dockerfile`](backend/Dockerfile).
+- Environment variables:
+  ```env
+  PORT=4000
+  NODE_ENV=production
+  CORS_ORIGIN=https://your-vercel-app.vercel.app
+  ```
+
+### 2. Frontend Deployment (Vercel)
+1. Set the root directory to `frontend`.
 2. Build command: `npm run build`
 3. Output directory: `dist`
-4. Set environment variable:
+4. Set environment variable (must be your HTTPS WebSocket backend URL, never `localhost`):
    ```env
-   VITE_SOCKET_URL=https://your-backend-domain.com
-   ```
-
-### Backend Deployment (Render / Railway / Fly.io / Heroku)
-1. Set the directory to `backend`.
-2. Build command: `npm run build`
-3. Start command: `node dist/server.js`
-4. Configure environment variables:
-   ```env
-   PORT=4000
-   NODE_ENV=production
-   CORS_ORIGIN=*
+   VITE_SOCKET_URL=https://your-backend-service.onrender.com
    ```
 
 ---

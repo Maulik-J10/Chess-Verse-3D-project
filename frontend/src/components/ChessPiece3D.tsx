@@ -96,26 +96,28 @@ const createWoodDiffuseMap = (isWhite: boolean, res: number): THREE.CanvasTextur
       }
     }
 
-    ctx.fillStyle = 'rgba(92, 50, 17, 0.22)';
+    const porePath = new Path2D();
     for (let p = 0; p < 180; p++) {
-      ctx.fillRect(rand() * 1024, rand() * 1024, 1.4, 4.2);
+      porePath.rect(rand() * 1024, rand() * 1024, 1.4, 4.2);
     }
+    ctx.fillStyle = 'rgba(92, 50, 17, 0.22)';
+    ctx.fill(porePath);
   } else {
-    // Softer matte-black wooden finish centered on #262421 with warm dark-brown wood grain (#3B332B, #4A3B2D)
+    // Charcoal-black wooden finish centered on #383633 with visible warm walnut grain (#49443E, #554B40, #625649)
     const bgGrad = ctx.createLinearGradient(0, 0, 1024, 0);
-    bgGrad.addColorStop(0.0, '#262421');
-    bgGrad.addColorStop(0.26, '#2b2723');
-    bgGrad.addColorStop(0.54, '#22201d');
-    bgGrad.addColorStop(0.78, '#292622');
-    bgGrad.addColorStop(1.0, '#262421');
+    bgGrad.addColorStop(0.0, '#383633');
+    bgGrad.addColorStop(0.24, '#3e3b37');
+    bgGrad.addColorStop(0.50, '#34322f');
+    bgGrad.addColorStop(0.76, '#3d3935');
+    bgGrad.addColorStop(1.0, '#383633');
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, 1024, 1024);
 
-    // Subtle warm-brown walnut tonal bands wrapping seamlessly around circumference
+    // Rich charcoal-walnut tonal bands (#49443E / #554B40) wrapping cleanly around piece circumference
     for (let b = 0; b < 7; b++) {
       const bx = (b / 7) * 1024;
       const bw = 85 + rand() * 80;
-      ctx.fillStyle = b % 2 === 0 ? 'rgba(74, 59, 45, 0.22)' : 'rgba(26, 24, 21, 0.28)';
+      ctx.fillStyle = b % 2 === 0 ? 'rgba(98, 86, 73, 0.24)' : 'rgba(73, 68, 62, 0.26)';
       ctx.fillRect(bx, 0, bw, 1024);
       if (bx + bw > 1024) ctx.fillRect(bx - 1024, 0, bw, 1024);
     }
@@ -126,7 +128,7 @@ const createWoodDiffuseMap = (isWhite: boolean, res: number): THREE.CanvasTextur
       const x = rand() * 1024;
       const dx1 = (rand() - 0.5) * 26;
       const dx2 = (rand() - 0.5) * 26;
-      const target = rand() > 0.42 ? warmBrownFibers : darkFibers;
+      const target = rand() > 0.38 ? warmBrownFibers : darkFibers;
       for (const wrapOffset of [0, -1024, 1024]) {
         if (wrapOffset !== 0 && x + wrapOffset > -40 && x + wrapOffset < 1064) {
           target.moveTo(x + wrapOffset, 0);
@@ -137,19 +139,19 @@ const createWoodDiffuseMap = (isWhite: boolean, res: number): THREE.CanvasTextur
         }
       }
     }
-    // Dark wood grain pores (#161412)
-    ctx.strokeStyle = 'rgba(18, 16, 14, 0.42)';
+    // Natural fine grain pores
+    ctx.strokeStyle = 'rgba(42, 39, 36, 0.38)';
     ctx.lineWidth = 1.65;
     ctx.stroke(darkFibers);
 
-    // Subtle warm dark-brown grain highlights (#3B332B / #4A3B2D)
-    ctx.strokeStyle = 'rgba(74, 59, 45, 0.44)';
-    ctx.lineWidth = 1.5;
+    // Clearly distinguishable warm brown grain highlights (#554B40 / #625649)
+    ctx.strokeStyle = 'rgba(98, 86, 73, 0.52)';
+    ctx.lineWidth = 1.55;
     ctx.stroke(warmBrownFibers);
 
-    // Fine cathedral wood grain rings matching white piece craftsmanship
-    ctx.strokeStyle = 'rgba(59, 51, 43, 0.34)';
-    ctx.lineWidth = 1.3;
+    // Subtle charcoal cathedral wood growth rings (#49443E / #554B40)
+    ctx.strokeStyle = 'rgba(85, 75, 64, 0.42)';
+    ctx.lineWidth = 1.35;
     for (let c = 0; c < 4; c++) {
       const cx = 140 + rand() * 744;
       const cy = 180 + c * 220;
@@ -160,10 +162,12 @@ const createWoodDiffuseMap = (isWhite: boolean, res: number): THREE.CanvasTextur
       }
     }
 
-    ctx.fillStyle = 'rgba(16, 14, 12, 0.38)';
+    const porePath = new Path2D();
     for (let p = 0; p < 170; p++) {
-      ctx.fillRect(rand() * 1024, rand() * 1024, 1.4, 4.0);
+      porePath.rect(rand() * 1024, rand() * 1024, 1.4, 4.0);
     }
+    ctx.fillStyle = 'rgba(38, 35, 31, 0.34)';
+    ctx.fill(porePath);
   }
 
   const caps = detectDeviceCapabilities();
@@ -261,7 +265,7 @@ const createWoodRoughnessMap = (): THREE.CanvasTexture | null => {
   return texture;
 };
 
-// Lazily built shared wood materials (whiteMap centered on #C08244, blackMap centered on #0D0D0D)
+// Lazily built shared wood materials (whiteMap centered on #C08244, blackMap centered on charcoal #383633)
 interface PieceMaterials {
   texRes: number;
   whiteMap: THREE.CanvasTexture | null;
@@ -300,8 +304,8 @@ function getPieceMaterials(): PieceMaterials | null {
   const blackFast = new THREE.MeshStandardMaterial({
     color: new THREE.Color('#ffffff'),
     map: blackMap || undefined,
-    roughness: 0.54,
-    metalness: 0.02,
+    roughness: 0.56,
+    metalness: 0.03,
   });
 
   const emeraldFelt = new THREE.MeshStandardMaterial({
@@ -311,7 +315,7 @@ function getPieceMaterials(): PieceMaterials | null {
   });
 
   const shadowGroove = new THREE.MeshStandardMaterial({
-    color: new THREE.Color('#170e07'),
+    color: new THREE.Color('#201b16'),
     roughness: 0.92,
     metalness: 0.0,
   });
@@ -360,8 +364,8 @@ function getPieceWoodMaterial(mats: PieceMaterials, color: PieceColor, quality: 
         color: new THREE.Color('#ffffff'),
         map: mats.blackMap || undefined,
         roughnessMap: mats.roughMap || undefined,
-        roughness: 0.96,
-        metalness: 0.02,
+        roughness: 0.88,
+        metalness: 0.03,
       });
     }
     return color === 'w' ? mats.whiteBalanced : mats.blackBalanced;
@@ -383,8 +387,8 @@ function getPieceWoodMaterial(mats: PieceMaterials, color: PieceColor, quality: 
       bumpMap: bumpMap || undefined,
       bumpScale: 0.015,
       roughnessMap: mats.roughMap || undefined,
-      roughness: 0.96,
-      metalness: 0.02,
+      roughness: 0.88,
+      metalness: 0.03,
     });
   }
   return color === 'w' ? mats.whiteFull : mats.blackFull;

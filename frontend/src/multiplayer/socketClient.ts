@@ -27,22 +27,96 @@ export interface RoomData {
 }
 
 const SESSION_KEY = 'chessverse_mp_session';
+const URL_OVERRIDE_KEY = 'chessverse_socket_url_override';
 const REQUEST_TIMEOUT_MS = 8000;
 
-function resolveServerUrl(): string {
-  const configured = (import.meta.env.VITE_SOCKET_URL as string | undefined)?.trim();
-  if (configured) return configured;
+export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+
+interface ResolvedServerConfig {
+  url: string | null;
+  shouldProbeSameOriginHealth: boolean;
+  configError: string | null;
+}
+
+function isLocalHostname(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname === '[::1]'
+  );
+}
+
+function isLoopbackUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    return isLocalHostname(parsed.hostname) || parsed.hostname === '0.0.0.0';
+  } catch {
+    return /localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(rawUrl);
+  }
+}
+
+function normalizeServerUrl(raw: string): string | null {
+  const cleaned = raw.trim().replace(/\/+$/, '');
+  if (!cleaned) return null;
+  if (!/^https?:\/\//i.test(cleaned) && !/^wss?:\/\//i.test(cleaned)) {
+    return null;
+  }
+  return cleaned;
+}
+
+function resolveServerConfig(): ResolvedServerConfig {
+  const runtimeOverride =
+    typeof window !== 'undefined'
+      ? normalizeServerUrl(
+          new URLSearchParams(window.location.search).get('socketUrl') ||
+            (typeof localStorage !== 'undefined' ? localStorage.getItem(URL_OVERRIDE_KEY) || '' : '')
+        )
+      : null;
+
+  const envConfigured = normalizeServerUrl((import.meta.env.VITE_SOCKET_URL as string | undefined) || '');
+  const candidate = runtimeOverride || envConfigured;
 
   if (typeof window !== 'undefined') {
     const { protocol, hostname, origin } = window.location;
-    if (protocol === 'https:') {
-      return origin;
+    const isRemoteHttpsPage = protocol === 'https:' && !isLocalHostname(hostname);
+
+    if (isRemoteHttpsPage) {
+      if (candidate && isLoopbackUrl(candidate)) {
+        return {
+          url: null,
+          shouldProbeSameOriginHealth: false,
+          configError:
+            'Multiplayer backend URL in this production build points to localhost:4000. Deploy the backend server (Render/Railway/Fly) and set VITE_SOCKET_URL in Vercel to that https:// backend URL.',
+        };
+      }
+      if (candidate) {
+        if (candidate.startsWith('http://') && !isLocalHostname(new URL(candidate).hostname)) {
+          return {
+            url: candidate.replace(/^http:\/\//i, 'https://'),
+            shouldProbeSameOriginHealth: false,
+            configError: null,
+          };
+        }
+        return { url: candidate, shouldProbeSameOriginHealth: false, configError: null };
+      }
+      // No VITE_SOCKET_URL set on HTTPS: only connect same-origin if /health proves a backend is actually running there
+      return { url: origin, shouldProbeSameOriginHealth: true, configError: null };
+    }
+
+    if (candidate) {
+      return { url: candidate, shouldProbeSameOriginHealth: false, configError: null };
     }
     if (hostname) {
-      return `http://${hostname}:4000`;
+      return { url: `http://${hostname}:4000`, shouldProbeSameOriginHealth: false, configError: null };
     }
   }
-  return 'http://localhost:4000';
+
+  return {
+    url: candidate || 'http://localhost:4000',
+    shouldProbeSameOriginHealth: false,
+    configError: null,
+  };
 }
 
 class SocketClient {
@@ -50,7 +124,74 @@ class SocketClient {
   private currentRoomCode: string | null = null;
   private currentRoomId: string | null = null;
   private currentPlayerId: string | null = null;
-  private serverUrl: string = resolveServerUrl();
+  private resolvedConfig: ResolvedServerConfig = resolveServerConfig();
+  private serverUrl: string = this.resolvedConfig.url || '';
+  private connectionStatus: ConnectionStatus = 'disconnected';
+  private inflightLobbyAction: 'create' | 'join' | null = null;
+  private sameOriginVerified: boolean | null = null;
+
+  public getConnectionStatus(): ConnectionStatus {
+    return this.connectionStatus;
+  }
+
+  public getServerUrl(): string {
+    return this.serverUrl;
+  }
+
+  private destroySocket() {
+    if (this.socket) {
+      this.socket.removeAllListeners();
+      this.socket.disconnect();
+      this.socket = null;
+    }
+    this.connectionStatus = 'disconnected';
+  }
+
+  private async ensureBackendReachableIfSameOrigin(): Promise<{ ok: boolean; error?: string }> {
+    this.resolvedConfig = resolveServerConfig();
+    if (this.resolvedConfig.configError) {
+      return { ok: false, error: this.resolvedConfig.configError };
+    }
+    if (!this.resolvedConfig.url) {
+      return {
+        ok: false,
+        error: 'Multiplayer backend URL is not configured (VITE_SOCKET_URL).',
+      };
+    }
+
+    this.serverUrl = this.resolvedConfig.url;
+
+    if (!this.resolvedConfig.shouldProbeSameOriginHealth || this.sameOriginVerified === true) {
+      return { ok: true };
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 3500);
+      const res = await fetch(`${this.serverUrl}/health`, { signal: controller.signal });
+      window.clearTimeout(timeout);
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const json = await res.json();
+        if (json && json.status === 'ok') {
+          this.sameOriginVerified = true;
+          return { ok: true };
+        }
+      }
+      this.sameOriginVerified = false;
+      return {
+        ok: false,
+        error:
+          'No persistent Socket.IO backend is running on this static Vercel domain. Deploy backend/ to a Node WebSocket host (Render/Railway/Fly) and set VITE_SOCKET_URL in Vercel.',
+      };
+    } catch {
+      return {
+        ok: false,
+        error:
+          'Unable to verify multiplayer backend service on this deployment. Check that the backend server is online and VITE_SOCKET_URL is set.',
+      };
+    }
+  }
 
   private persistSession() {
     if (typeof sessionStorage === 'undefined') return;
@@ -86,18 +227,48 @@ class SocketClient {
   }
 
   public connect(url?: string): Socket | null {
-    if (url) this.serverUrl = url.trim();
+    if (url) {
+      const normalized = normalizeServerUrl(url);
+      if (normalized) {
+        this.serverUrl = normalized;
+        this.resolvedConfig = { url: normalized, shouldProbeSameOriginHealth: false, configError: null };
+      }
+    } else {
+      this.resolvedConfig = resolveServerConfig();
+      if (this.resolvedConfig.configError || !this.resolvedConfig.url) {
+        this.connectionStatus = 'error';
+        return null;
+      }
+      this.serverUrl = this.resolvedConfig.url;
+    }
+
     if (!this.serverUrl) return null;
 
     if (!this.socket) {
+      this.connectionStatus = 'connecting';
       this.socket = io(this.serverUrl, {
+        path: '/socket.io/',
         reconnection: true,
-        reconnectionAttempts: 10,
+        reconnectionAttempts: 5,
         reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
         timeout: REQUEST_TIMEOUT_MS,
         transports: ['websocket', 'polling'],
       });
+      this.socket.on('connect', () => {
+        this.connectionStatus = 'connected';
+      });
+      this.socket.on('disconnect', () => {
+        this.connectionStatus = 'disconnected';
+      });
+      this.socket.on('connect_error', () => {
+        this.connectionStatus = 'error';
+      });
+      this.socket.io.on('reconnect_failed', () => {
+        this.connectionStatus = 'error';
+      });
     } else if (!this.socket.connected) {
+      this.connectionStatus = 'connecting';
       this.socket.connect();
     }
 
@@ -108,16 +279,28 @@ class SocketClient {
     return this.socket;
   }
 
-  private emitWithConnection<T>(
+  private async emitWithConnection<T>(
     eventName: string,
     payload: unknown,
     onResult: (res: T & { success: boolean; error?: string }) => void
   ) {
+    const preflight = await this.ensureBackendReachableIfSameOrigin();
+    if (!preflight.ok) {
+      this.connectionStatus = 'error';
+      onResult({
+        success: false,
+        error: preflight.error || 'Multiplayer server URL is not configured cleanly.',
+      } as T & { success: boolean; error?: string });
+      return;
+    }
+
     const s = this.connect();
     if (!s) {
       onResult({
         success: false,
-        error: 'Multiplayer server URL is not configured (VITE_SOCKET_URL missing for HTTPS deployment).',
+        error:
+          this.resolvedConfig.configError ||
+          'Multiplayer server URL is not configured (VITE_SOCKET_URL missing or points to localhost).',
       } as T & { success: boolean; error?: string });
       return;
     }
@@ -129,20 +312,26 @@ class SocketClient {
       clearTimeout(timer);
       s.off('connect', sendEmit);
       s.off('connect_error', onConnectErr);
+      if (res?.success === false && !s.connected) {
+        this.destroySocket();
+      }
       onResult(res);
     };
 
     const timer = window.setTimeout(() => {
+      this.connectionStatus = 'error';
       finish({
         success: false,
-        error: 'Connection to multiplayer server timed out. Verify the backend server is running and try again.',
+        error: 'Connection to multiplayer server timed out. Verify the backend server is online and try again.',
       });
     }, REQUEST_TIMEOUT_MS);
 
     const onConnectErr = (err: Error) => {
+      this.connectionStatus = 'error';
+      const detail = err?.message || 'WebSocket connection failed';
       finish({
         success: false,
-        error: `Unable to reach multiplayer server (${err?.message || 'connection failed'}).`,
+        error: `Unable to reach multiplayer server (${detail}).`,
       });
     };
 
@@ -167,6 +356,11 @@ class SocketClient {
     preferredColor: 'w' | 'b' | 'random',
     onResult: (data: { success: boolean; room?: RoomData; player?: any; error?: string }) => void
   ) {
+    if (this.inflightLobbyAction === 'create') {
+      onResult({ success: false, error: 'Room creation already in progress.' });
+      return;
+    }
+    this.inflightLobbyAction = 'create';
     this.emitWithConnection<{ room?: RoomData; player?: any }>(
       'room:create',
       {
@@ -179,6 +373,7 @@ class SocketClient {
         preferredColor,
       },
       (res) => {
+        this.inflightLobbyAction = null;
         if (res && res.success && res.room && res.player) {
           this.currentRoomCode = res.room.roomCode;
           this.currentRoomId = res.room.roomId;
@@ -195,10 +390,16 @@ class SocketClient {
     playerName: string,
     onResult: (data: { success: boolean; room?: RoomData; player?: any; error?: string }) => void
   ) {
+    if (this.inflightLobbyAction === 'join') {
+      onResult({ success: false, error: 'Already connecting to room...' });
+      return;
+    }
+    this.inflightLobbyAction = 'join';
     this.emitWithConnection<{ room?: RoomData; player?: any }>(
       'room:join',
       { roomCode, playerName },
       (res) => {
+        this.inflightLobbyAction = null;
         if (res && res.success && res.room && res.player) {
           this.currentRoomCode = res.room.roomCode;
           this.currentRoomId = res.room.roomId;
@@ -320,10 +521,8 @@ class SocketClient {
 
   public disconnect() {
     this.leaveRoom();
-    if (this.socket) {
-      this.socket.disconnect();
-      this.socket = null;
-    }
+    this.inflightLobbyAction = null;
+    this.destroySocket();
   }
 }
 
