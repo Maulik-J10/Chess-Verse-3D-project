@@ -47,6 +47,7 @@ export const RoomLobby: React.FC = () => {
   };
 
   useEffect(() => {
+    socketClient.warmUp();
     return () => {
       cleanupWaitingListener();
     };

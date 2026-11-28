@@ -28,7 +28,8 @@ export interface RoomData {
 
 const SESSION_KEY = 'chessverse_mp_session';
 const URL_OVERRIDE_KEY = 'chessverse_socket_url_override';
-const REQUEST_TIMEOUT_MS = 8000;
+const LOCAL_TIMEOUT_MS = 8000;
+const REMOTE_TIMEOUT_MS = 25000;
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -166,9 +167,10 @@ class SocketClient {
     }
 
     try {
+      const httpBase = this.serverUrl.replace(/^wss:\/\//i, 'https://').replace(/^ws:\/\//i, 'http://');
       const controller = new AbortController();
       const timeout = window.setTimeout(() => controller.abort(), 3500);
-      const res = await fetch(`${this.serverUrl}/health`, { signal: controller.signal });
+      const res = await fetch(`${httpBase}/health`, { signal: controller.signal });
       window.clearTimeout(timeout);
       const contentType = res.headers.get('content-type') || '';
       if (res.ok && contentType.includes('application/json')) {
@@ -226,6 +228,14 @@ class SocketClient {
     }
   }
 
+  public warmUp() {
+    const cfg = resolveServerConfig();
+    if (cfg.configError || !cfg.url || typeof fetch === 'undefined') return;
+    if (cfg.shouldProbeSameOriginHealth || isLoopbackUrl(cfg.url)) return;
+    const httpBase = cfg.url.replace(/^wss:\/\//i, 'https://').replace(/^ws:\/\//i, 'http://');
+    fetch(`${httpBase}/health`, { mode: 'cors' }).catch(() => {});
+  }
+
   public connect(url?: string): Socket | null {
     if (url) {
       const normalized = normalizeServerUrl(url);
@@ -244,6 +254,8 @@ class SocketClient {
 
     if (!this.serverUrl) return null;
 
+    const connectTimeoutMs = isLoopbackUrl(this.serverUrl) ? LOCAL_TIMEOUT_MS : REMOTE_TIMEOUT_MS;
+
     if (!this.socket) {
       this.connectionStatus = 'connecting';
       this.socket = io(this.serverUrl, {
@@ -252,8 +264,9 @@ class SocketClient {
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
-        timeout: REQUEST_TIMEOUT_MS,
-        transports: ['websocket', 'polling'],
+        timeout: connectTimeoutMs,
+        transports: ['polling', 'websocket'],
+        upgrade: true,
       });
       this.socket.on('connect', () => {
         this.connectionStatus = 'connected';
@@ -318,13 +331,14 @@ class SocketClient {
       onResult(res);
     };
 
+    const requestTimeoutMs = isLoopbackUrl(this.serverUrl) ? LOCAL_TIMEOUT_MS : REMOTE_TIMEOUT_MS;
     const timer = window.setTimeout(() => {
       this.connectionStatus = 'error';
       finish({
         success: false,
         error: 'Connection to multiplayer server timed out. Verify the backend server is online and try again.',
       });
-    }, REQUEST_TIMEOUT_MS);
+    }, requestTimeoutMs);
 
     const onConnectErr = (err: Error) => {
       this.connectionStatus = 'error';

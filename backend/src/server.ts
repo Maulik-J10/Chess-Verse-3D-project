@@ -15,24 +15,47 @@ dotenv.config();
 const app = express();
 app.set('trust proxy', 1);
 const port = Number(process.env.PORT) || 4000;
+const host = process.env.HOST || '0.0.0.0';
 
-function parseCorsOrigins(raw: string | undefined): string | string[] {
+const VERCEL_PROJECT_ORIGIN_RE = /^https:\/\/chessverse3d(?:-[a-z0-9-]+)?\.vercel\.app$/i;
+
+function parseCorsOrigins(raw: string | undefined): string[] | '*' {
   const val = (raw || '*').trim();
   if (!val || val === '*') return '*';
   const origins = val
     .split(',')
     .map((o) => o.trim().replace(/\/+$/, ''))
     .filter(Boolean);
-  return origins.length <= 1 ? (origins[0] || '*') : origins;
+  return origins.length === 0 ? '*' : origins;
 }
 
-const allowedCorsOrigin = parseCorsOrigins(process.env.CORS_ORIGIN);
+const allowedCorsList = parseCorsOrigins(process.env.CORS_ORIGIN);
+
+const corsOriginValidator = (
+  origin: string | undefined,
+  callback: (err: Error | null, allow?: boolean) => void
+) => {
+  if (!origin) {
+    callback(null, true);
+    return;
+  }
+  if (allowedCorsList === '*') {
+    callback(null, true);
+    return;
+  }
+  const normalized = origin.trim().replace(/\/+$/, '');
+  if (allowedCorsList.includes(normalized) || VERCEL_PROJECT_ORIGIN_RE.test(normalized)) {
+    callback(null, true);
+    return;
+  }
+  callback(new Error(`Origin ${normalized} not allowed by CORS`));
+};
 
 app.use(
   cors({
-    origin: allowedCorsOrigin,
+    origin: corsOriginValidator,
     methods: ['GET', 'POST', 'OPTIONS'],
-    credentials: allowedCorsOrigin !== '*',
+    credentials: allowedCorsList !== '*',
   })
 );
 app.use(express.json());
@@ -41,11 +64,11 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: allowedCorsOrigin,
+    origin: corsOriginValidator,
     methods: ['GET', 'POST'],
-    credentials: allowedCorsOrigin !== '*',
+    credentials: allowedCorsList !== '*',
   },
-  transports: ['websocket', 'polling'],
+  transports: ['polling', 'websocket'],
   allowUpgrades: true,
   perMessageDeflate: false,
   httpCompression: true,
@@ -107,8 +130,8 @@ io.on('connection', (socket) => {
   registerGameEvents(io, socket, roomService, gameService, rateLimiter);
 });
 
-server.listen(port, () => {
-  console.log(`[The Grand Chess Room] Server running on port ${port}`);
+server.listen(port, host, () => {
+  console.log(`[The Grand Chess Room] Server listening on http://${host}:${port}`);
 });
 
 const shutdownGracefully = () => {
