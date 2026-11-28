@@ -33,67 +33,72 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenRules 
   const setGameMode = useGameStore((s) => s.setGameMode);
 
   const handleStartAi = () => {
+    soundManager.unlockAudio();
     soundManager.playClick();
     startAiGame(selectedColor, selectedDifficulty, selectedTimeControl);
   };
 
   const handleOpenMultiplayer = () => {
+    soundManager.unlockAudio();
     soundManager.playClick();
     setGameMode('lobby');
   };
 
   return (
-    <div className="absolute inset-0 pointer-events-none z-30 flex flex-col justify-between p-3 sm:p-8 md:p-10 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] select-none overflow-y-auto overflow-x-hidden overscroll-none">
+    <div className="absolute inset-0 pointer-events-none z-30 flex flex-col justify-between p-3 sm:p-8 md:p-10 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.85rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] select-none overflow-y-auto overflow-x-hidden overscroll-contain">
       {/* Top Header Row: Branding & Single Rules / Settings Actions */}
       <div className="flex items-start justify-between w-full gap-2 pointer-events-none">
         {/* Branding Header */}
-        <div className="pointer-events-auto flex flex-col items-start max-w-xs sm:max-w-md animate-fade-in mt-0.5 sm:mt-0">
-          <h1 className="text-2xl sm:text-4xl md:text-5xl font-serif font-black tracking-wider text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)] text-left">
+        <div className="pointer-events-auto flex flex-col items-start min-w-0 flex-1 pr-1 sm:max-w-md animate-fade-in mt-0.5 sm:mt-0">
+          <h1 className="text-[17px] min-[420px]:text-2xl sm:text-4xl md:text-5xl font-serif font-black tracking-wide sm:tracking-wider text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.65)] text-left whitespace-nowrap">
             ChessVerse 3D
           </h1>
 
-          <p className="text-[10px] sm:text-sm font-serif italic text-[#1e2024] mt-0.5 sm:mt-1.5 tracking-widest uppercase text-left">
+          <p className="text-[9px] min-[360px]:text-[10px] sm:text-sm font-serif italic text-[#f7f7f4]/95 drop-shadow-[0_1px_6px_rgba(0,0,0,0.85)] mt-0.5 sm:mt-1.5 tracking-wider sm:tracking-widest uppercase text-left leading-tight">
             "Think beyond the board. See beyond the move."
           </p>
         </div>
 
         {/* Top-Right Quick Access Pills (Single Rules + Single Settings Entry Across All Screens) */}
-        <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 shrink-0 animate-fade-in">
+        <div className="pointer-events-auto flex items-center gap-1 min-[380px]:gap-2 shrink-0 animate-fade-in">
           <button
             onClick={() => {
+              soundManager.unlockAudio();
               soundManager.playClick();
               onOpenRules();
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/95 hover:bg-white border border-[#c6a45c]/35 hover:border-[#c6a45c] text-[#202226] text-xs font-serif font-bold shadow-sm lg:backdrop-blur-md cursor-pointer transition-all active:scale-95 min-h-[38px]"
+            className="flex items-center gap-1 min-[380px]:gap-1.5 px-2 min-[380px]:px-3 py-1.5 rounded-xl bg-white/95 hover:bg-white border border-[#c6a45c]/35 hover:border-[#c6a45c] text-[#202226] text-xs font-serif font-bold shadow-sm lg:backdrop-blur-md cursor-pointer transition-all active:scale-95 min-h-[36px] min-[380px]:min-h-[38px]"
             title="Chess Rules"
           >
-            <BookOpen className="w-3.5 h-3.5 text-[#c6a45c]" />
-            <span className="inline text-[11px] sm:text-xs">Rules</span>
+            <BookOpen className="w-3.5 h-3.5 text-[#c6a45c] shrink-0" />
+            <span className="inline text-[10px] min-[380px]:text-xs">Rules</span>
           </button>
 
           <button
             onClick={() => {
+              soundManager.unlockAudio();
               soundManager.playClick();
               onOpenSettings();
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/95 hover:bg-white border border-[#c6a45c]/35 hover:border-[#c6a45c] text-[#202226] text-xs font-serif font-bold shadow-sm lg:backdrop-blur-md cursor-pointer transition-all active:scale-95 min-h-[38px]"
+            className="flex items-center gap-1 min-[380px]:gap-1.5 px-2 min-[380px]:px-3 py-1.5 rounded-xl bg-white/95 hover:bg-white border border-[#c6a45c]/35 hover:border-[#c6a45c] text-[#202226] text-xs font-serif font-bold shadow-sm lg:backdrop-blur-md cursor-pointer transition-all active:scale-95 min-h-[36px] min-[380px]:min-h-[38px]"
             title="Graphics & Sound Settings"
           >
-            <Settings className="w-3.5 h-3.5 text-[#666762]" />
-            <span className="inline text-[11px] sm:text-xs">Settings</span>
+            <Settings className="w-3.5 h-3.5 text-[#666762] shrink-0" />
+            <span className="inline text-[10px] min-[380px]:text-xs">Settings</span>
           </button>
         </div>
       </div>
 
       {/* Main Menu Buttons (Pearl-White & Champagne Gold Cards) */}
-      <div className="pointer-events-auto flex flex-col gap-2 sm:gap-3 w-full max-w-xs sm:max-w-sm mx-auto sm:mx-0 animate-fade-in my-auto sm:my-0 mt-4 sm:mt-6 mb-2 sm:mb-4">
+      <div className="pointer-events-auto flex flex-col gap-2 sm:gap-3 w-full max-w-xs sm:max-w-sm mx-auto sm:mx-0 animate-fade-in mt-3 sm:mt-6 mb-1 sm:mb-4 shrink-0">
         {/* PLAY VS COMPUTER */}
         <button
           onClick={() => {
+            soundManager.unlockAudio();
             soundManager.playClick();
             setShowAiSetup(true);
           }}
-          className="group relative flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-[#f7f7f4]/95 lg:backdrop-blur-md border border-[#c6a45c]/35 hover:border-[#c6a45c] hover:bg-white transition-all duration-300 shadow-royal-card active:scale-95 cursor-pointer min-h-[48px]"
+          className="group relative flex items-center justify-between p-3 sm:p-4 rounded-2xl bg-[#f7f7f4]/95 lg:backdrop-blur-md border border-[#c6a45c]/35 hover:border-[#c6a45c] hover:bg-white transition-all duration-300 shadow-royal-card active:scale-95 cursor-pointer min-h-[48px]"
         >
           <div className="flex items-center gap-3">
             <div className="p-2 sm:p-2.5 rounded-xl bg-[#c6a45c]/15 border border-[#c6a45c]/30 text-[#c6a45c] group-hover:scale-110 transition-transform">
@@ -114,7 +119,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenRules 
         {/* PLAY WITH FRIEND */}
         <button
           onClick={handleOpenMultiplayer}
-          className="group relative flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-[#f7f7f4]/95 lg:backdrop-blur-md border border-[#c6a45c]/35 hover:border-[#c6a45c] hover:bg-white transition-all duration-300 shadow-royal-card active:scale-95 cursor-pointer min-h-[48px]"
+          className="group relative flex items-center justify-between p-3 sm:p-4 rounded-2xl bg-[#f7f7f4]/95 lg:backdrop-blur-md border border-[#c6a45c]/35 hover:border-[#c6a45c] hover:bg-white transition-all duration-300 shadow-royal-card active:scale-95 cursor-pointer min-h-[48px]"
         >
           <div className="flex items-center gap-3">
             <div className="p-2 sm:p-2.5 rounded-xl bg-[#666762]/10 border border-[#666762]/25 text-[#202226] group-hover:scale-110 transition-transform">
@@ -222,7 +227,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onOpenSettings, onOpenRules 
                   Select Time Control
                 </label>
                 <div className="grid grid-cols-3 gap-2">
-                  {TIME_CONTROLS.slice(2, 8).map((tc) => (
+                  {TIME_CONTROLS.map((tc) => (
                     <button
                       key={tc.id}
                       type="button"

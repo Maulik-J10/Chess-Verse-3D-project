@@ -27,16 +27,23 @@ export const RoomLobby: React.FC = () => {
 
   const creatingRef = useRef(false);
   const opponentHandlerRef = useRef<((payload: any) => void) | null>(null);
+  const stateHandlerRef = useRef<((roomPayload: any) => void) | null>(null);
 
   const startMultiplayerGame = useGameStore((s) => s.startMultiplayerGame);
   const setGameMode = useGameStore((s) => s.setGameMode);
 
   const cleanupWaitingListener = () => {
     const s = socketClient.getSocket();
-    if (s && opponentHandlerRef.current) {
-      s.off('room:opponent-connected', opponentHandlerRef.current);
-      opponentHandlerRef.current = null;
+    if (s) {
+      if (opponentHandlerRef.current) {
+        s.off('room:opponent-connected', opponentHandlerRef.current);
+      }
+      if (stateHandlerRef.current) {
+        s.off('game:state', stateHandlerRef.current);
+      }
     }
+    opponentHandlerRef.current = null;
+    stateHandlerRef.current = null;
   };
 
   useEffect(() => {
@@ -73,13 +80,25 @@ export const RoomLobby: React.FC = () => {
 
           const s = socketClient.getSocket();
           if (s) {
-            const onOpponentConnected = (payload: any) => {
-              const latestRoom: RoomData = payload?.room || room;
+            let started = false;
+            const beginWhenReady = (latestRoom: RoomData) => {
+              if (started) return;
+              started = true;
               cleanupWaitingListener();
               startMultiplayerGame(latestRoom, player.color, selectedTimeControl, true);
             };
+            const onOpponentConnected = (payload: any) => {
+              beginWhenReady(payload?.room || room);
+            };
+            const onGameState = (roomPayload: any) => {
+              if (roomPayload && roomPayload.roomId === room.roomId && roomPayload.status === 'active') {
+                beginWhenReady(roomPayload);
+              }
+            };
             opponentHandlerRef.current = onOpponentConnected;
+            stateHandlerRef.current = onGameState;
             s.once('room:opponent-connected', onOpponentConnected);
+            s.on('game:state', onGameState);
           }
         } else {
           setErrorMsg(res.error || 'Failed to create room on server. Please try again.');

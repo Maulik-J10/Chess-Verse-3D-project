@@ -18,7 +18,7 @@ export const App: React.FC = () => {
   const [isRulesOpen, setIsRulesOpen] = useState(false);
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-[#121316]">
+    <div className="relative w-screen h-[100dvh] overflow-hidden bg-[#121316]">
       {/* 1-Time Entry Preloader (2.0s duration with White & Black Kings and golden loading bar) */}
       <Preloader />
 

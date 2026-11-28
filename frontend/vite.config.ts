@@ -9,6 +9,17 @@ export default defineConfig({
     host: true,
     cors: true,
     allowedHosts: true,
+    proxy: {
+      '/socket.io': {
+        target: 'http://localhost:4000',
+        ws: true,
+        changeOrigin: true,
+      },
+      '/health': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+      },
+    },
   },
   worker: {
     format: 'es',

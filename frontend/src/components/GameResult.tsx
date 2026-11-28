@@ -1,12 +1,14 @@
 import React, { useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { useGameStore } from '../store/gameStore';
-import { Trophy, RefreshCw, Home, XCircle, Minus } from 'lucide-react';
+import { Trophy, RefreshCw, Home, XCircle, Minus, Search } from 'lucide-react';
 
 export const GameResult: React.FC = () => {
   const gameResult = useGameStore((s) => s.gameResult);
   const playerColor = useGameStore((s) => s.playerColor);
   const history = useGameStore((s) => s.history) || [];
+  const isReviewingGame = useGameStore((s) => s.isReviewingGame);
+  const enterReviewMode = useGameStore((s) => s.enterReviewMode);
   const resetGame = useGameStore((s) => s.resetGame);
   const returnToMenu = useGameStore((s) => s.returnToMenu);
 
@@ -30,7 +32,7 @@ export const GameResult: React.FC = () => {
     }
   }, [isWinner]);
 
-  if (!gameResult || !gameResult.isOver) return null;
+  if (!gameResult || !gameResult.isOver || isReviewingGame) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 animate-fade-in">
@@ -83,6 +85,18 @@ export const GameResult: React.FC = () => {
 
         {/* Action Buttons */}
         <div className="flex flex-col gap-2.5">
+          {history.length > 0 && (
+            <button
+              onClick={enterReviewMode}
+              className="w-full py-2.5 rounded-xl bg-[#202226] hover:bg-[#32353b] text-[#f7f7f4] font-serif font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-sm"
+            >
+              <Search className="w-4 h-4 text-[#c6a45c]" />
+              <span>
+                {gameResult.title === 'Checkmate' ? 'Review Checkmate & Mistakes' : 'Review Board'}
+              </span>
+            </button>
+          )}
+
           <button
             onClick={resetGame}
             className="w-full py-3 rounded-xl bg-[#c6a45c] hover:bg-[#b5934a] text-white font-serif font-bold text-xs uppercase tracking-wider transition-all shadow-glow-gold flex items-center justify-center gap-2 cursor-pointer active:scale-95"

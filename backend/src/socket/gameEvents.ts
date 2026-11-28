@@ -150,13 +150,19 @@ export function registerGameEvents(
   // RESIGNATION
   socket.on('game:resign', (payload: { roomCode: string; playerId: string }, callback) => {
     const room = roomService.getRoomByCode(payload.roomCode);
-    if (!room) return;
+    if (!room) {
+      if (typeof callback === 'function') callback({ success: false, error: 'Room not found' });
+      return;
+    }
 
     let playerColor: PieceColor | null = null;
     if (room.players.white?.playerId === payload.playerId) playerColor = 'w';
     else if (room.players.black?.playerId === payload.playerId) playerColor = 'b';
 
-    if (!playerColor) return;
+    if (!playerColor) {
+      if (typeof callback === 'function') callback({ success: false, error: 'Unauthorized player' });
+      return;
+    }
 
     const res = roomService.resignGame(room.roomId, playerColor);
     if (res.success && res.room) {
@@ -164,6 +170,8 @@ export function registerGameEvents(
       io.to(room.roomId).emit('game:resign', { resignedBy: playerColor, winner, room: res.room });
       io.to(room.roomId).emit('game:finished', { reason: 'resignation', winner, room: res.room });
       if (typeof callback === 'function') callback({ success: true });
+    } else if (typeof callback === 'function') {
+      callback({ success: false, error: 'Game cannot be resigned now' });
     }
   });
 
@@ -206,6 +214,33 @@ export function registerGameEvents(
     roomService.resolveDrawOffer(room.roomId, false);
     socket.to(room.roomId).emit('game:reject-draw');
     if (typeof callback === 'function') callback({ success: true });
+  });
+
+  // REMATCH / RESET ROOM SYNCHRONOUSLY FOR BOTH PLAYERS
+  socket.on('game:rematch', (payload: { roomCode: string; playerId: string }, callback) => {
+    const room = roomService.getRoomByCode(payload?.roomCode);
+    if (!room) {
+      if (typeof callback === 'function') callback({ success: false, error: 'Room not found' });
+      return;
+    }
+
+    const isParticipant =
+      room.players.white?.playerId === payload?.playerId ||
+      room.players.black?.playerId === payload?.playerId;
+    if (!isParticipant) {
+      if (typeof callback === 'function') callback({ success: false, error: 'Unauthorized player' });
+      return;
+    }
+
+    const res = roomService.rematchRoom(room.roomId);
+    if (res.success && res.room) {
+      gameService.removeGame(room.roomId);
+      gameService.getOrCreateGame(room.roomId, res.room.fen);
+      io.to(room.roomId).emit('game:rematch', { room: res.room });
+      if (typeof callback === 'function') callback({ success: true, room: res.room });
+    } else if (typeof callback === 'function') {
+      callback({ success: false, error: 'Both players must be seated to rematch' });
+    }
   });
 
   // DISCONNECT HANDLER

@@ -388,4 +388,31 @@ export class RoomService {
 
     return { success: true, room };
   }
+
+  public rematchRoom(roomId: string): { success: boolean; room?: RoomState } {
+    const room = this.rooms.get(roomId);
+    if (!room || !room.players.white || !room.players.black) {
+      return { success: false };
+    }
+
+    const freshChess = new Chess();
+    room.fen = freshChess.fen();
+    room.history = [];
+    room.status = 'active';
+    room.winner = undefined;
+    room.drawOfferFrom = null;
+    this.concludedAtMap.delete(roomId);
+
+    const initialMs = room.timeControl.initialMinutes * 60 * 1000;
+    room.clock.whiteTimeMs = initialMs;
+    room.clock.blackTimeMs = initialMs;
+    room.clock.activeColor = 'w';
+    if (room.timeControl.initialMinutes > 0) {
+      ClockService.startTurn(room.clock, 'w');
+    } else {
+      room.clock.isRunning = false;
+    }
+
+    return { success: true, room };
+  }
 }

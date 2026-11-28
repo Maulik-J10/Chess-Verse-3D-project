@@ -34,9 +34,9 @@ function resolveServerUrl(): string {
   if (configured) return configured;
 
   if (typeof window !== 'undefined') {
-    const { protocol, hostname } = window.location;
+    const { protocol, hostname, origin } = window.location;
     if (protocol === 'https:') {
-      return '';
+      return origin;
     }
     if (hostname) {
       return `http://${hostname}:4000`;
@@ -286,6 +286,21 @@ class SocketClient {
       roomCode: this.currentRoomCode,
       playerId: this.currentPlayerId,
     });
+  }
+
+  public requestRematch(onResult?: (res: any) => void) {
+    if (!this.socket || !this.currentRoomCode || !this.currentPlayerId) {
+      if (onResult) onResult({ success: false, error: 'Not connected to room' });
+      return;
+    }
+    this.socket.emit(
+      'game:rematch',
+      {
+        roomCode: this.currentRoomCode,
+        playerId: this.currentPlayerId,
+      },
+      onResult
+    );
   }
 
   public leaveRoom() {

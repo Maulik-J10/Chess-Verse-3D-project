@@ -147,6 +147,27 @@ async function runMultiplayerTest() {
     });
   });
 
+  // 6. Rematch synchronizes fresh board & resets history for both players
+  await new Promise<void>((resolve) => {
+    let rematchEvents = 0;
+    const onRematch = (payload: any) => {
+      assert.strictEqual(payload.room.history.length, 0);
+      assert.strictEqual(payload.room.status, 'active');
+      rematchEvents++;
+      if (rematchEvents === 2) {
+        clientA.off('game:rematch', onRematch);
+        clientB.off('game:rematch', onRematch);
+        console.log('✓ Rematch synchronized clean board state for both players');
+        resolve();
+      }
+    };
+    clientA.on('game:rematch', onRematch);
+    clientB.on('game:rematch', onRematch);
+    clientA.emit('game:rematch', { roomCode, playerId: playerAId }, (res: any) => {
+      assert.strictEqual(res.success, true);
+    });
+  });
+
   // Cleanup
   clientA.disconnect();
   clientB.disconnect();

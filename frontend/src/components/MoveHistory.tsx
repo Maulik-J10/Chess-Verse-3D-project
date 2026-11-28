@@ -6,6 +6,7 @@ export const MoveHistory: React.FC = () => {
   const history = useGameStore((s) => s.history);
   const historyIndex = useGameStore((s) => s.historyIndex);
   const setHistoryIndex = useGameStore((s) => s.setHistoryIndex);
+  const reviewSummary = useGameStore((s) => s.reviewSummary);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -28,10 +29,29 @@ export const MoveHistory: React.FC = () => {
 
   const isLive = historyIndex === -1 || historyIndex === history.length - 1;
 
+  const badgeForPly = (idx: number) => {
+    if (!reviewSummary) return null;
+    if (idx === reviewSummary.matingMoveIndex) {
+      return (
+        <span className="ml-1 px-1 rounded bg-[#c6a45c]/25 text-[#9a7322] font-sans text-[9px] font-bold">
+          MATE
+        </span>
+      );
+    }
+    if (idx === reviewSummary.decisiveMistakeIndex) {
+      return (
+        <span className="ml-1 px-1 rounded bg-amber-100 text-amber-800 font-sans text-[9px] font-bold">
+          ?!
+        </span>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="flex flex-col bg-[#f7f7f4]/95 backdrop-blur-md border border-[#c6a45c]/35 rounded-2xl overflow-hidden shadow-royal-card w-full text-xs text-[#202226]">
       {/* Header */}
-      <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[#c6a45c]/20 bg-[#eeede8]/60">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#c6a45c]/20 bg-[#eeede8]/60">
         <div className="flex items-center gap-1.5 font-serif font-bold text-[#202226]">
           <History className="w-3.5 h-3.5 text-[#c6a45c]" />
           <span>Move History</span>
@@ -62,10 +82,10 @@ export const MoveHistory: React.FC = () => {
       {/* Move list */}
       <div
         ref={scrollRef}
-        className="max-h-48 overflow-y-auto p-2 space-y-0.5 font-mono select-none"
+        className="max-h-32 xl:max-h-44 overflow-y-auto px-2 py-1.5 space-y-0.5 font-mono select-none"
       >
         {movePairs.length === 0 ? (
-          <div className="text-[#a7a8a5] italic text-center py-4 text-[11px]">
+          <div className="text-[#a7a8a5] italic text-center py-2 text-[11px]">
             No moves played yet.
           </div>
         ) : (
@@ -79,13 +99,14 @@ export const MoveHistory: React.FC = () => {
               {pair.white && (
                 <button
                   onClick={() => setHistoryIndex(pair.white!.idx)}
-                  className={`flex-1 text-left px-2 py-0.5 rounded transition-colors font-medium ${
+                  className={`flex-1 text-left px-2 py-0.5 rounded transition-colors font-medium flex items-center justify-between ${
                     historyIndex === pair.white.idx
                       ? 'bg-[#c6a45c]/25 text-[#202226] font-bold border border-[#c6a45c]'
                       : 'text-[#202226] hover:bg-black/5'
                   }`}
                 >
-                  {pair.white.san}
+                  <span>{pair.white.san}</span>
+                  {badgeForPly(pair.white.idx)}
                 </button>
               )}
 
@@ -93,13 +114,14 @@ export const MoveHistory: React.FC = () => {
               {pair.black ? (
                 <button
                   onClick={() => setHistoryIndex(pair.black!.idx)}
-                  className={`flex-1 text-left px-2 py-0.5 rounded transition-colors font-medium ${
+                  className={`flex-1 text-left px-2 py-0.5 rounded transition-colors font-medium flex items-center justify-between ${
                     historyIndex === pair.black.idx
                       ? 'bg-[#c6a45c]/25 text-[#202226] font-bold border border-[#c6a45c]'
                       : 'text-[#666762] hover:text-[#202226] hover:bg-black/5'
                   }`}
                 >
-                  {pair.black.san}
+                  <span>{pair.black.san}</span>
+                  {badgeForPly(pair.black.idx)}
                 </button>
               ) : (
                 <div className="flex-1" />

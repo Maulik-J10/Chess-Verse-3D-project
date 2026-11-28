@@ -73,7 +73,9 @@ export class StockfishEngineController {
   private isInitializing = false;
   private isWorkerReady = false;
   private workerFailed = false;
-  private pendingSearch: { fen: string; depth: number; movetime: number } | null = null;
+  private pendingSearch: { fen: string; depth: number; movetime: number; token: number } | null = null;
+  private activeSearchToken = 0;
+  private searchCounter = 0;
   private fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
   private onMoveCallback: ((move: { from: string; to: string; promotion?: string }) => void) | null = null;
@@ -106,16 +108,20 @@ export class StockfishEngineController {
         } else if (line === 'readyok') {
           this.isWorkerReady = true;
           this.isInitializing = false;
-          if (this.pendingSearch) {
+          if (this.pendingSearch && this.pendingSearch.token === this.searchCounter) {
             const req = this.pendingSearch;
             this.pendingSearch = null;
+            this.activeSearchToken = req.token;
             this.dispatchWorkerSearch(req.fen, req.depth, req.movetime);
+          } else {
+            this.pendingSearch = null;
           }
         } else if (line.startsWith('bestmove')) {
           const parts = line.split(' ');
           const moveStr = parts[1];
+          const matchesCurrent = this.activeSearchToken === this.searchCounter;
           if (this.onThinkingCallback) this.onThinkingCallback(false);
-          if (moveStr && moveStr !== '(none)') {
+          if (matchesCurrent && moveStr && moveStr !== '(none)') {
             const parsed = this.parseUciMove(moveStr);
             if (this.onMoveCallback) this.onMoveCallback(parsed);
           }
@@ -172,7 +178,9 @@ export class StockfishEngineController {
   }
 
   public stop() {
+    this.searchCounter++;
     this.pendingSearch = null;
+    if (this.onThinkingCallback) this.onThinkingCallback(false);
     if (this.fallbackTimer) {
       clearTimeout(this.fallbackTimer);
       this.fallbackTimer = null;
@@ -183,6 +191,7 @@ export class StockfishEngineController {
   }
 
   public calculateBestMove(fen: string) {
+    const token = ++this.searchCounter;
     if (this.onThinkingCallback) this.onThinkingCallback(true);
 
     const config = AI_DIFFICULTIES[this.currentDifficulty];
@@ -192,17 +201,14 @@ export class StockfishEngineController {
     }
 
     if (this.worker && this.isWorkerReady) {
+      this.activeSearchToken = token;
       this.dispatchWorkerSearch(fen, config.depth, config.movetime);
-      return;
+    } else if (this.workerFailed) {
+      this.activeSearchToken = token;
+      this.runFallbackSearch(fen, config.depth, config.movetime, token);
+    } else {
+      this.pendingSearch = { fen, depth: config.depth, movetime: config.movetime, token };
     }
-
-    if (this.worker && !this.workerFailed) {
-      // Queue move until WASM finishes ~200ms async init
-      this.pendingSearch = { fen, depth: config.depth, movetime: config.movetime };
-      return;
-    }
-
-    this.runFallbackSearch(fen, config.depth, config.movetime);
   }
 
   private dispatchWorkerSearch(fen: string, depth: number, movetime: number) {
@@ -211,10 +217,12 @@ export class StockfishEngineController {
     this.worker.postMessage(`go depth ${depth} movetime ${movetime}`);
   }
 
-  private runFallbackSearch(fen: string, depth: number, movetime: number) {
+  private runFallbackSearch(fen: string, depth: number, movetime: number, token?: number) {
     if (this.fallbackTimer) clearTimeout(this.fallbackTimer);
+    const activeToken = token ?? this.searchCounter;
     this.fallbackTimer = setTimeout(() => {
       this.fallbackTimer = null;
+      if (activeToken !== this.searchCounter) return;
       // Bounded fallback depth 2 so main thread stays snappy on mobile if WASM failed
       const best = this.calculateTacticalMove(fen, Math.min(depth, 2));
       if (this.onThinkingCallback) this.onThinkingCallback(false);

@@ -7,6 +7,12 @@ class SoundManager {
   private ctx: AudioContext | null = null;
   private isMuted: boolean = false;
   private volume: number = 0.8;
+  private cachedNoiseBuffer: AudioBuffer | null = null;
+  private lastEvent: { kind: string; source: 'player' | 'ai' | 'system'; timestamp: number } = {
+    kind: '',
+    source: 'system',
+    timestamp: 0,
+  };
 
   constructor() {
     // AudioContext will be initialized on first user interaction
@@ -20,8 +26,35 @@ class SoundManager {
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
     }
+  }
+
+  public unlockAudio() {
+    this.initContext();
+  }
+
+  public getLastAudioEvent() {
+    return this.lastEvent;
+  }
+
+  private recordEvent(kind: string, source: 'player' | 'ai' | 'system') {
+    this.lastEvent = { kind, source, timestamp: Date.now() };
+  }
+
+  private scheduleWhenReady(fn: () => void) {
+    if (this.isMuted) return;
+    this.initContext();
+    if (!this.ctx) return;
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().then(() => {
+        if (!this.isMuted && this.ctx && this.ctx.state === 'running') {
+          fn();
+        }
+      }).catch(() => {});
+      return;
+    }
+    fn();
   }
 
   public setMuted(muted: boolean) {
@@ -67,19 +100,28 @@ class SoundManager {
   // NORMAL MOVE (Rich wooden thud)
   public playMove() {
     if (this.isMuted) return;
-    this.initContext();
-    if (!this.ctx) return;
+    this.recordEvent('move', 'player');
+    this.scheduleWhenReady(() => this.triggerWoodenTap(160, 45, 1400, 0.35, 0.2));
+  }
 
+  private triggerWoodenTap(
+    startFreq: number,
+    endFreq: number,
+    clickFreq: number,
+    thudGain: number,
+    clickGain: number,
+  ) {
+    if (!this.ctx || this.isMuted) return;
     const now = this.ctx.currentTime;
 
     // Sub thud
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = 'triangle';
-    osc.frequency.setValueAtTime(160, now);
-    osc.frequency.exponentialRampToValueAtTime(45, now + 0.08);
+    osc.frequency.setValueAtTime(startFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(endFreq, now + 0.08);
 
-    gain.gain.setValueAtTime(0.35 * this.volume, now);
+    gain.gain.setValueAtTime(thudGain * this.volume, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
 
     osc.connect(gain);
@@ -87,21 +129,66 @@ class SoundManager {
     osc.start(now);
     osc.stop(now + 0.1);
 
-    // Click snap
+    // Click snap (reuses pre-built buffer)
     const noiseBuffer = this.createNoiseBuffer(0.03);
     const noise = this.ctx.createBufferSource();
     noise.buffer = noiseBuffer;
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(1400, now);
+    filter.frequency.setValueAtTime(clickFreq, now);
     const noiseGain = this.ctx.createGain();
-    noiseGain.gain.setValueAtTime(0.2 * this.volume, now);
+    noiseGain.gain.setValueAtTime(clickGain * this.volume, now);
     noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
 
     noise.connect(filter);
     filter.connect(noiseGain);
     noiseGain.connect(this.ctx.destination);
     noise.start(now);
+  }
+
+  // DISTINCT COMPUTER / OPPONENT MOVE SOUND
+  public playComputerMove(kind: 'move' | 'capture' | 'check' | 'castle' | 'promotion' | 'checkmate') {
+    if (this.isMuted) return;
+    this.recordEvent(kind, 'ai');
+    this.scheduleWhenReady(() => {
+      if (!this.ctx || this.isMuted) return;
+      if (kind === 'capture') {
+        this.triggerWoodenTap(195, 62, 1750, 0.3, 0.22);
+        setTimeout(() => {
+          if (!this.ctx || this.isMuted) return;
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(360, now);
+          osc.frequency.exponentialRampToValueAtTime(92, now + 0.065);
+          gain.gain.setValueAtTime(0.32 * this.volume, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.075);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.08);
+        }, 22);
+        return;
+      }
+
+      if (kind === 'castle') {
+        this.triggerWoodenTap(195, 62, 1750, 0.28, 0.2);
+        setTimeout(() => {
+          this.triggerWoodenTap(180, 56, 1650, 0.26, 0.18);
+        }, 110);
+        return;
+      }
+
+      this.triggerWoodenTap(195, 62, 1750, 0.28, 0.2);
+      if (kind === 'check') {
+        setTimeout(() => this.playCheck(), 35);
+      } else if (kind === 'promotion') {
+        setTimeout(() => this.playPromotion(), 35);
+      } else if (kind === 'checkmate') {
+        setTimeout(() => this.playCheckmate(), 45);
+      }
+    });
   }
 
   // CAPTURE (Weighty double-impact clack)
@@ -358,11 +445,17 @@ class SoundManager {
   }
 
   private createNoiseBuffer(duration: number): AudioBuffer {
-    const bufferSize = this.ctx!.sampleRate * duration;
+    if (this.cachedNoiseBuffer && Math.abs(duration - 0.03) < 0.001) {
+      return this.cachedNoiseBuffer;
+    }
+    const bufferSize = Math.max(1, Math.floor(this.ctx!.sampleRate * duration));
     const buffer = this.ctx!.createBuffer(1, bufferSize, this.ctx!.sampleRate);
     const output = buffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
       output[i] = Math.random() * 2 - 1;
+    }
+    if (Math.abs(duration - 0.03) < 0.001) {
+      this.cachedNoiseBuffer = buffer;
     }
     return buffer;
   }

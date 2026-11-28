@@ -1,5 +1,5 @@
 import React, { useRef, useMemo, useEffect } from 'react';
-import { useFrame, useThree, ThreeEvent } from '@react-three/fiber';
+import { useThree, ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
 import { ChessPiece3D } from './ChessPiece3D';
@@ -28,8 +28,10 @@ const boardAssets = typeof document !== 'undefined' ? (() => {
   const captureRingGeo = new THREE.RingGeometry(0.32, 0.42, 22);
   const hitGridPlaneGeo = new THREE.PlaneGeometry(8.0, 8.0);
 
-  // Merge Silver Architectural Border & Undercarriage (7 meshes -> 1 draw call)
-  const nsBorder = new THREE.BoxGeometry(8.96, 0.15, 0.72);
+  // Merge Silver Architectural Border & Undercarriage with complete 90-degree flush corners
+  // N/S bars span full outer width 9.60m ([-4.80..+4.80]) across z=[±4.08..±4.80];
+  // E/W bars fill exact interior 8.16m ([-4.08..+4.08]) across x=[±4.08..±4.80] — zero corner notches or overlap!
+  const nsBorder = new THREE.BoxGeometry(9.60, 0.15, 0.72);
   const ewBorder = new THREE.BoxGeometry(0.72, 0.15, 8.16);
   const underBase = new THREE.BoxGeometry(9.16, 0.16, 9.16);
   const underBevel = new THREE.BoxGeometry(8.4, 0.12, 8.4);
@@ -46,11 +48,11 @@ const boardAssets = typeof document !== 'undefined' ? (() => {
   underBase.dispose();
   underBevel.dispose();
 
-  // Merge Inner Gold Beading & Outer Gold Perimeter Lip (8 meshes -> 1 draw call)
+  // Merge Inner Gold Beading & Outer Gold Perimeter Lip with complete flush mitered corners
   const nsInnerGold = new THREE.BoxGeometry(8.16, 0.03, 0.08);
   const ewInnerGold = new THREE.BoxGeometry(0.08, 0.03, 8.0);
-  const nsOuterGold = new THREE.BoxGeometry(9.16, 0.15, 0.04);
-  const ewOuterGold = new THREE.BoxGeometry(0.04, 0.15, 9.16);
+  const nsOuterGold = new THREE.BoxGeometry(9.68, 0.15, 0.04);
+  const ewOuterGold = new THREE.BoxGeometry(0.04, 0.15, 9.60);
   const goldMergedGeo = mergeTransformedParts([
     { geo: nsInnerGold, pos: [0, 0.055, -4.04] },
     { geo: nsInnerGold, pos: [0, 0.055, 4.04] },
@@ -72,9 +74,9 @@ const boardAssets = typeof document !== 'undefined' ? (() => {
   const frameMat = new THREE.MeshStandardMaterial({ color: '#cfd0cc', roughness: 0.35, metalness: 0.28 });
   const goldTrimMat = new THREE.MeshStandardMaterial({ color: '#c6a45c', metalness: 0.88, roughness: 0.2 });
 
-  const selectedMat = new THREE.MeshBasicMaterial({ color: '#c6a45c', transparent: true, opacity: 0.5 });
-  const lastMoveMat = new THREE.MeshBasicMaterial({ color: '#d4b876', transparent: true, opacity: 0.35 });
-  const checkMat = new THREE.MeshBasicMaterial({ color: '#ef4444', transparent: true, opacity: 0.7 });
+  const selectedMat = new THREE.MeshBasicMaterial({ color: '#e67e22', transparent: true, opacity: 0.52 });
+  const lastMoveMat = new THREE.MeshBasicMaterial({ color: '#facc15', transparent: true, opacity: 0.56 });
+  const checkMat = new THREE.MeshBasicMaterial({ color: '#ef4444', transparent: true, opacity: 0.78 });
   const legalDotMat = new THREE.MeshBasicMaterial({ color: '#10b981', transparent: true, opacity: 0.88 });
   const captureRingMat = new THREE.MeshBasicMaterial({ color: '#ef4444', transparent: true, opacity: 0.9 });
   const hitPlaneMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
@@ -93,7 +95,6 @@ export const ChessBoard3D: React.FC = () => {
   const boardGroupRef = useRef<THREE.Group>(null);
   const lightInstancedRef = useRef<THREE.InstancedMesh>(null);
   const darkInstancedRef = useRef<THREE.InstancedMesh>(null);
-  const floatTimeRef = useRef(0);
   const pointerDownRef = useRef<{ x: number; y: number; time: number; square: string } | null>(null);
   const lastCursorRef = useRef<'auto' | 'pointer'>('auto');
 
@@ -139,18 +140,7 @@ export const ChessBoard3D: React.FC = () => {
     if (darkInstancedRef.current) darkInstancedRef.current.instanceMatrix.needsUpdate = true;
   }, []);
 
-  // Subtle slow floating levitation on High/Ultra (settled cleanly at 1.35m on Performance/Balanced demand tiers)
-  useFrame((_, delta) => {
-    if (!boardGroupRef.current) return;
-    if (graphicsQuality === 'low' || graphicsQuality === 'medium') {
-      if (boardGroupRef.current.position.y !== 1.35) {
-        boardGroupRef.current.position.y = 1.35;
-      }
-      return;
-    }
-    floatTimeRef.current += delta;
-    boardGroupRef.current.position.y = 1.35 + Math.sin(floatTimeRef.current * 0.85) * 0.035;
-  });
+  // Board stays strictly stationary at y=1.35m at all times (never bobs/shifts when lights toggle)
 
   // Resolve exact chess square string from a single raycast hit on the 8x8 plane
   const resolveSquareFromHit = (e: ThreeEvent<PointerEvent>): string | null => {
@@ -163,15 +153,16 @@ export const ChessBoard3D: React.FC = () => {
     return `${FILES[fIdx]}${RANKS[rIdx]}`;
   };
 
-  // Highlight coordinates for active squares only (avoids 64 idle highlight groups)
+  // Highlight coordinates with clear visual priority:
+  // Last-move yellow always renders on both from & to squares; Check/Checkmate & Selection stack cleanly above.
   const selectedCoords = useMemo(() => (selectedSquare ? squareToXZ(selectedSquare) : null), [selectedSquare]);
   const lastMoveFromCoords = useMemo(
-    () => (lastMove && lastMove.from !== selectedSquare ? squareToXZ(lastMove.from) : null),
-    [lastMove, selectedSquare]
+    () => (lastMove ? squareToXZ(lastMove.from) : null),
+    [lastMove]
   );
   const lastMoveToCoords = useMemo(
-    () => (lastMove && lastMove.to !== selectedSquare ? squareToXZ(lastMove.to) : null),
-    [lastMove, selectedSquare]
+    () => (lastMove ? squareToXZ(lastMove.to) : null),
+    [lastMove]
   );
   const checkCoords = useMemo(() => (kingInCheckSquare ? squareToXZ(kingInCheckSquare) : null), [kingInCheckSquare]);
 
@@ -270,6 +261,24 @@ export const ChessBoard3D: React.FC = () => {
       />
 
       {/* ==================== ACTIVE SQUARE HIGHLIGHTS & LEGAL MARKERS ==================== */}
+      {lastMoveFromCoords && (
+        <mesh
+          position={[lastMoveFromCoords[0], 0.063, lastMoveFromCoords[1]]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          geometry={boardAssets.highlightPlaneGeo}
+          material={boardAssets.lastMoveMat}
+          raycast={NO_RAYCAST}
+        />
+      )}
+      {lastMoveToCoords && (
+        <mesh
+          position={[lastMoveToCoords[0], 0.063, lastMoveToCoords[1]]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          geometry={boardAssets.highlightPlaneGeo}
+          material={boardAssets.lastMoveMat}
+          raycast={NO_RAYCAST}
+        />
+      )}
       {selectedCoords && (
         <mesh
           position={[selectedCoords[0], 0.065, selectedCoords[1]]}
@@ -279,27 +288,9 @@ export const ChessBoard3D: React.FC = () => {
           raycast={NO_RAYCAST}
         />
       )}
-      {lastMoveFromCoords && (
-        <mesh
-          position={[lastMoveFromCoords[0], 0.064, lastMoveFromCoords[1]]}
-          rotation={[-Math.PI / 2, 0, 0]}
-          geometry={boardAssets.highlightPlaneGeo}
-          material={boardAssets.lastMoveMat}
-          raycast={NO_RAYCAST}
-        />
-      )}
-      {lastMoveToCoords && (
-        <mesh
-          position={[lastMoveToCoords[0], 0.064, lastMoveToCoords[1]]}
-          rotation={[-Math.PI / 2, 0, 0]}
-          geometry={boardAssets.highlightPlaneGeo}
-          material={boardAssets.lastMoveMat}
-          raycast={NO_RAYCAST}
-        />
-      )}
       {checkCoords && (
         <mesh
-          position={[checkCoords[0], 0.066, checkCoords[1]]}
+          position={[checkCoords[0], 0.067, checkCoords[1]]}
           rotation={[-Math.PI / 2, 0, 0]}
           geometry={boardAssets.highlightPlaneGeo}
           material={boardAssets.checkMat}

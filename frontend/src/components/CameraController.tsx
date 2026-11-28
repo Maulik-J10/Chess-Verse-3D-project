@@ -25,20 +25,20 @@ const PRESET_CONFIGS: Record<
   { pos: [number, number, number]; target: [number, number, number] }
 > = {
   front: {
-    pos: [0, 4.25, 7.6],
-    target: [0, 2.0, 0],
+    pos: [0, 4.95, 9.2],
+    target: [0, 1.85, 0],
   },
   top: {
     pos: [0, 12.6, 0.25], // Fits entire 9.68m board + borders cleanly between HUD bars & below ceiling
     target: [0, 1.35, 0],
   },
   white: {
-    pos: [0, 3.95, 6.9],
-    target: [0, 2.0, 0],
+    pos: [0, 4.75, 8.8],
+    target: [0, 1.85, 0],
   },
   black: {
-    pos: [0, 3.95, -6.9],
-    target: [0, 2.0, 0],
+    pos: [0, 4.75, -8.8],
+    target: [0, 1.85, 0],
   },
   cinematic: {
     pos: [7.2, 4.2, 7.2],
@@ -46,7 +46,7 @@ const PRESET_CONFIGS: Record<
   },
   free: {
     pos: [4.6, 4.2, 6.6],
-    target: [0, 1.9, 0],
+    target: [0, 1.85, 0],
   },
 };
 
@@ -335,8 +335,8 @@ export const CameraController: React.FC = () => {
         invalidate();
       }
     } else {
-      // Smoothly maintain target height (prevents vertical snap when dragging out of Top view)
-      const desiredTargetY = cameraPreset === 'top' ? 1.35 : 1.78;
+      // Smoothly maintain target height consistently at 1.85m (eliminates jump on chandelier/scene clicks)
+      const desiredTargetY = cameraPreset === 'top' ? 1.35 : 1.85;
       const dy = Math.abs(controls.target.y - desiredTargetY);
       const nextY =
         dy > 0.001

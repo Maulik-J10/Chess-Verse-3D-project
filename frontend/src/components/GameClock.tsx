@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useGameStore } from '../store/gameStore';
 import { Clock } from 'lucide-react';
 import { PieceColor } from '../chess/types';
@@ -14,25 +14,9 @@ export const GameClock: React.FC<GameClockProps> = ({
   isActive,
   playerName,
 }) => {
-  // Isolate time subscription directly inside GameClock so ticking NEVER re-renders the whole GameHUD!
+  // Pure isolated subscriber — ticking is driven once centrally in GameHUD so dual mobile/desktop instances never double-count time.
   const timeMs = useGameStore((s) => (color === 'w' ? s.whiteTimeMs : s.blackTimeMs));
-  const tickClock = useGameStore((s) => s.tickClock);
-  const isClockRunning = useGameStore((s) => s.isClockRunning);
   const timeControl = useGameStore((s) => s.timeControl);
-
-  const isUnderTenSec = timeControl.minutes > 0 && timeMs <= 10500;
-
-  // Periodic ticker for active clock (250ms normally -> 4x fewer updates; 100ms under 10s for crisp tenths)
-  useEffect(() => {
-    if (!isActive || !isClockRunning || timeControl.minutes === 0) return;
-
-    const intervalMs = isUnderTenSec ? 100 : 250;
-    const interval = setInterval(() => {
-      tickClock(intervalMs);
-    }, intervalMs);
-
-    return () => clearInterval(interval);
-  }, [isActive, isClockRunning, timeControl.minutes, isUnderTenSec, tickClock]);
 
   const formatTime = (ms: number): string => {
     if (timeControl.minutes === 0) return '∞';
@@ -52,21 +36,21 @@ export const GameClock: React.FC<GameClockProps> = ({
 
   return (
     <div
-      className={`relative flex items-center justify-between px-3 py-2 rounded-xl transition-all duration-300 ${
+      className={`relative flex items-center justify-between gap-2 px-3 py-2 rounded-xl transition-all duration-300 ${
         isActive
           ? 'bg-[#c6a45c]/15 border-2 border-[#c6a45c] shadow-glow-gold'
           : 'bg-white/80 border border-[#d6d6d2]'
       } ${isCritical && isActive ? 'animate-pulse bg-red-100 border-red-500' : ''}`}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 min-w-0 flex-1">
         <div
-          className={`w-3.5 h-3.5 rounded-full border shadow-sm ${
+          className={`w-3.5 h-3.5 rounded-full border shadow-sm shrink-0 ${
             color === 'w' ? 'bg-[#f7f7f4] border-[#bfc1c2]' : 'bg-[#202226] border-black'
           }`}
         />
-        <div className="flex flex-col">
+        <div className="flex flex-col min-w-0 flex-1">
           {playerName && (
-            <span className="text-xs font-serif font-bold text-[#202226] truncate max-w-[110px]">
+            <span className="text-xs font-serif font-bold text-[#202226] truncate block">
               {playerName}
             </span>
           )}
@@ -76,7 +60,7 @@ export const GameClock: React.FC<GameClockProps> = ({
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5 font-mono text-base font-bold">
+      <div className="flex items-center gap-1 font-mono text-sm xl:text-base font-bold shrink-0">
         <Clock
           className={`w-3.5 h-3.5 ${
             isActive ? (isLowTime ? 'text-red-500' : 'text-[#c6a45c]') : 'text-[#a7a8a5]'

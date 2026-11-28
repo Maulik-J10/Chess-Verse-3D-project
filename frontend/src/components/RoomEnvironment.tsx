@@ -25,14 +25,14 @@ interface OakFloorTextures {
   roughnessMap: THREE.CanvasTexture;
 }
 const oakTextureCache = new Map<number, OakFloorTextures>();
-const botanicalTextureCache = new Map<number, THREE.CanvasTexture>();
+const chevronTextureCache = new Map<number, THREE.CanvasTexture>();
 
-function getBotanicalWallpaperTexture(): THREE.CanvasTexture | null {
+function getChevronWallpaperTexture(): THREE.CanvasTexture | null {
   if (typeof document === 'undefined') return null;
   const caps = detectDeviceCapabilities();
   const res = caps.isLowEndHardware || caps.isTouch ? 512 : 1024;
-  if (botanicalTextureCache.has(res)) {
-    return botanicalTextureCache.get(res)!;
+  if (chevronTextureCache.has(res)) {
+    return chevronTextureCache.get(res)!;
   }
 
   const canvas = document.createElement('canvas');
@@ -44,234 +44,56 @@ function getBotanicalWallpaperTexture(): THREE.CanvasTexture | null {
   const TILE = 1024;
   ctx.scale(res / TILE, res / TILE);
 
-  // Soft luminous warm ivory-cream base harmonious with gallery center pillar (#f2eee8)
-  ctx.fillStyle = '#f5f2eb';
+  // Warm ivory / cream gallery wallpaper background (#EDE9E1)
+  ctx.fillStyle = '#EDE9E1';
   ctx.fillRect(0, 0, TILE, TILE);
 
-  // Deterministic botanical composition (large sweeping tropical leaves, multi-directional overlap)
-  let seed = 419;
-  const rand = () => {
-    seed = (seed * 9301 + 49297) % 233280;
-    return seed / 233280;
-  };
+  // Subtle repeating staggered double-chevron downward arrow pattern matching reference image
+  const cols = 6;
+  const rows = 8;
+  const colStep = TILE / cols;
+  const rowStep = TILE / rows;
 
-  interface LeafSpec {
-    cx: number;
-    cy: number;
-    angle: number;
-    length: number;
-    width: number;
-    bend: number;
-    leftFill: string;
-    rightFill: string;
-    veinColor: string;
-    outlineColor: string;
-    veinPairs: number;
-  }
+  const drawDoubleChevron = (cx: number, cy: number, outerColor: string, innerColor: string) => {
+    const hw = 18;
+    const armTopY = -20;
+    const tipY = 12;
 
-  const palettePairs: [string, string][] = [
-    ['#f7f5ef', '#eef2eb'],
-    ['#f2f3ed', '#e7ece5'],
-    ['#f5f4ee', '#ebf0e9'],
-    ['#eff2eb', '#e4eae3'],
-    ['#f8f6f0', '#f0f3ec'],
-  ];
-
-  // Hand-spaced anchor grid with organic jitter so overlapping leaves fill the tile smoothly without clumping
-  const leaves: LeafSpec[] = [];
-  const cols = 4;
-  const rows = 4;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const gx = ((c + (r % 2 === 0 ? 0.25 : 0.72) + (rand() - 0.5) * 0.42) / cols) * TILE;
-      const gy = ((r + 0.5 + (rand() - 0.5) * 0.48) / rows) * TILE;
-      const angle = (rand() - 0.5) * Math.PI * 1.45 - Math.PI * 0.5;
-      const length = 430 + rand() * 210;
-      const width = 165 + rand() * 82;
-      const bend = (rand() - 0.5) * 105;
-      const [leftFill, rightFill] = palettePairs[(r * cols + c) % palettePairs.length];
-      leaves.push({
-        cx: ((gx % TILE) + TILE) % TILE,
-        cy: ((gy % TILE) + TILE) % TILE,
-        angle,
-        length,
-        width,
-        bend,
-        leftFill,
-        rightFill,
-        veinColor: rand() > 0.45 ? 'rgba(126, 145, 134, 0.56)' : 'rgba(138, 156, 145, 0.48)',
-        outlineColor: 'rgba(140, 158, 147, 0.48)',
-        veinPairs: 22 + Math.floor(rand() * 8),
-      });
-    }
-  }
-
-  // Add 4 secondary foreground accent blades spanning diagonal joints
-  for (let k = 0; k < 4; k++) {
-    const [leftFill, rightFill] = palettePairs[(k + 1) % palettePairs.length];
-    leaves.push({
-      cx: ((k * 260 + 130 + (rand() - 0.5) * 80) % TILE + TILE) % TILE,
-      cy: ((k * 310 + 160 + (rand() - 0.5) * 80) % TILE + TILE) % TILE,
-      angle: -Math.PI * 0.5 + (k % 2 === 0 ? 0.55 : -0.62) + (rand() - 0.5) * 0.25,
-      length: 480 + rand() * 140,
-      width: 185 + rand() * 55,
-      bend: (rand() - 0.5) * 95,
-      leftFill,
-      rightFill,
-      veinColor: 'rgba(122, 142, 131, 0.58)',
-      outlineColor: 'rgba(138, 156, 146, 0.50)',
-      veinPairs: 25,
-    });
-  }
-
-  const drawSingleLeaf = (leaf: LeafSpec, ox: number, oy: number) => {
-    const dirX = Math.cos(leaf.angle);
-    const dirY = Math.sin(leaf.angle);
-    const perpX = -dirY;
-    const perpY = dirX;
-    const halfLen = leaf.length * 0.5;
-
-    // Curved spine endpoints (base -> mid control -> tapered tip)
-    const bx = ox - dirX * halfLen;
-    const by = oy - dirY * halfLen;
-    const tx = ox + dirX * halfLen;
-    const ty = oy + dirY * halfLen;
-    const mx = ox + perpX * leaf.bend;
-    const my = oy + perpY * leaf.bend;
-
-    const spineAt = (t: number): [number, number] => {
-      const mt = 1 - t;
-      return [
-        mt * mt * bx + 2 * mt * t * mx + t * t * tx,
-        mt * mt * by + 2 * mt * t * my + t * t * ty,
-      ];
-    };
-
-    const normalAt = (t: number): [number, number] => {
-      const dx = 2 * (1 - t) * (mx - bx) + 2 * t * (tx - mx);
-      const dy = 2 * (1 - t) * (my - by) + 2 * t * (ty - my);
-      const len = Math.hypot(dx, dy) || 1;
-      return [-dy / len, dx / len];
-    };
-
-    const halfWidthAt = (t: number): number => {
-      // Broad rounded base-mid tapering cleanly into graceful pointed tip
-      const shape = Math.sin(Math.pow(Math.max(0, Math.min(1, t)), 0.72) * Math.PI);
-      return shape * leaf.width * 0.5;
-    };
-
-    const steps = 18;
-    const leftPts: [number, number][] = [];
-    const rightPts: [number, number][] = [];
-    const spinePts: [number, number][] = [];
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      const [sx, sy] = spineAt(t);
-      const [nx, ny] = normalAt(t);
-      const hw = halfWidthAt(t);
-      spinePts.push([sx, sy]);
-      leftPts.push([sx + nx * hw, sy + ny * hw]);
-      rightPts.push([sx - nx * hw, sy - ny * hw]);
-    }
-
-    // Build whole leaf closed path
-    const leafPath = new Path2D();
-    leafPath.moveTo(spinePts[0][0], spinePts[0][1]);
-    for (let i = 1; i <= steps; i++) {
-      leafPath.lineTo(leftPts[i][0], leftPts[i][1]);
-    }
-    for (let i = steps - 1; i >= 0; i--) {
-      leafPath.lineTo(rightPts[i][0], rightPts[i][1]);
-    }
-    leafPath.closePath();
-
-    // Subtle soft ambient lift halo around leaf margin so overlapping layers read clearly
-    ctx.strokeStyle = 'rgba(130, 145, 134, 0.10)';
-    ctx.lineWidth = 6.0;
-    ctx.stroke(leafPath);
-
-    // Fill warm/pale side & cool-sage shaded side cleanly split down curved midrib
-    const leftHalf = new Path2D();
-    leftHalf.moveTo(spinePts[0][0], spinePts[0][1]);
-    for (let i = 1; i <= steps; i++) leftHalf.lineTo(leftPts[i][0], leftPts[i][1]);
-    for (let i = steps - 1; i >= 0; i--) leftHalf.lineTo(spinePts[i][0], spinePts[i][1]);
-    leftHalf.closePath();
-    ctx.fillStyle = leaf.leftFill;
-    ctx.fill(leftHalf);
-
-    const rightHalf = new Path2D();
-    rightHalf.moveTo(spinePts[0][0], spinePts[0][1]);
-    for (let i = 1; i <= steps; i++) rightHalf.lineTo(spinePts[i][0], spinePts[i][1]);
-    for (let i = steps - 1; i >= 0; i--) rightHalf.lineTo(rightPts[i][0], rightPts[i][1]);
-    rightHalf.closePath();
-    ctx.fillStyle = leaf.rightFill;
-    ctx.fill(rightHalf);
-
-    // Delicate flowing arched veins clipped smoothly inside leaf contour
-    ctx.save();
-    ctx.clip(leafPath);
-    const veinsPath = new Path2D();
-    const pairs = leaf.veinPairs;
-    for (let v = 1; v < pairs; v++) {
-      const t0 = 0.04 + (v / pairs) * 0.9;
-      const [sx, sy] = spineAt(t0);
-      const tEnd = Math.min(0.99, t0 + 0.16);
-      const [ex, ey] = spineAt(tEnd);
-      const [enx, eny] = normalAt(tEnd);
-      const hwEnd = halfWidthAt(tEnd) * 1.15;
-      const tMid = (t0 + tEnd) * 0.5;
-      const [mx0, my0] = spineAt(tMid);
-      const [mnx, mny] = normalAt(tMid);
-      const hwMid = halfWidthAt(tMid) * 0.58;
-
-      // Left swept botanical vein
-      veinsPath.moveTo(sx, sy);
-      veinsPath.quadraticCurveTo(mx0 + mnx * hwMid, my0 + mny * hwMid, ex + enx * hwEnd, ey + eny * hwEnd);
-
-      // Right swept botanical vein (slight natural offset for organic hand-drawn rhythm)
-      const t0R = Math.min(0.95, t0 + 0.015);
-      const [rsx, rsy] = spineAt(t0R);
-      const tEndR = Math.min(0.99, t0R + 0.16);
-      const [rex, rey] = spineAt(tEndR);
-      const [renx, reny] = normalAt(tEndR);
-      const rhwEnd = halfWidthAt(tEndR) * 1.15;
-      const [rmx, rmy] = spineAt((t0R + tEndR) * 0.5);
-      const [rmnx, rmny] = normalAt((t0R + tEndR) * 0.5);
-      const rhwMid = halfWidthAt((t0R + tEndR) * 0.5) * 0.58;
-
-      veinsPath.moveTo(rsx, rsy);
-      veinsPath.quadraticCurveTo(rmx - rmnx * rhwMid, rmy - rmny * rhwMid, rex - renx * rhwEnd, rey - reny * rhwEnd);
-    }
-    ctx.strokeStyle = leaf.veinColor;
-    ctx.lineWidth = 2.0;
-    ctx.lineCap = 'round';
-    ctx.stroke(veinsPath);
-    ctx.restore();
-
-    // Fine flowing midrib & subtle botanical margin outline
-    ctx.strokeStyle = leaf.outlineColor;
-    ctx.lineWidth = 1.65;
-    ctx.stroke(leafPath);
-
-    ctx.strokeStyle = leaf.veinColor;
-    ctx.lineWidth = 2.15;
+    // Lower / outer crisp chevron V
+    ctx.strokeStyle = outerColor;
+    ctx.lineWidth = 3.2;
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
     ctx.beginPath();
-    ctx.moveTo(bx, by);
-    ctx.quadraticCurveTo(mx, my, tx, ty);
+    ctx.moveTo(cx - hw, cy + armTopY);
+    ctx.lineTo(cx, cy + tipY);
+    ctx.lineTo(cx + hw, cy + armTopY);
+    ctx.stroke();
+
+    // Upper / nested secondary chevron V
+    const ihw = 15.5;
+    const iTopY = -34;
+    const iTipY = -3.5;
+    ctx.strokeStyle = innerColor;
+    ctx.lineWidth = 2.8;
+    ctx.beginPath();
+    ctx.moveTo(cx - ihw, cy + iTopY);
+    ctx.lineTo(cx, cy + iTipY);
+    ctx.lineTo(cx + ihw, cy + iTopY);
     ctx.stroke();
   };
 
-  // Render seamlessly across 3x3 periodic tile neighborhood
-  for (let i = 0; i < leaves.length; i++) {
-    const leaf = leaves[i];
-    const margin = leaf.length * 0.68;
-    for (let dx = -TILE; dx <= TILE; dx += TILE) {
-      for (let dy = -TILE; dy <= TILE; dy += TILE) {
-        const ox = leaf.cx + dx;
-        const oy = leaf.cy + dy;
-        if (ox + margin >= 0 && ox - margin <= TILE && oy + margin >= 0 && oy - margin <= TILE) {
-          drawSingleLeaf(leaf, ox, oy);
-        }
+  for (let r = -1; r <= rows; r++) {
+    const cy = (r + 0.5) * rowStep;
+    const staggerX = Math.abs(r) % 2 === 1 ? colStep * 0.5 : 0;
+    for (let c = -1; c <= cols + 1; c++) {
+      const cx = c * colStep + colStep * 0.5 + staggerX;
+      // Alternating columns create diagonal dark-navy (#18243A/#303C50) & muted slate-grey (#737985) cadence
+      const isPrimaryDark = (((c % 2) + 2) % 2 === 0);
+      const outer = isPrimaryDark ? '#18243A' : '#737985';
+      const inner = isPrimaryDark ? '#303C50' : '#737985';
+      if (cx > -40 && cx < TILE + 40 && cy > -50 && cy < TILE + 50) {
+        drawDoubleChevron(cx, cy, outer, inner);
       }
     }
   }
@@ -281,9 +103,9 @@ function getBotanicalWallpaperTexture(): THREE.CanvasTexture | null {
   texture.wrapT = THREE.RepeatWrapping;
   texture.generateMipmaps = true;
   texture.minFilter = THREE.LinearMipmapLinearFilter;
-  texture.anisotropy = caps.isTouch ? 2 : 4;
+  texture.anisotropy = caps.isTouch ? 2 : 8;
   texture.colorSpace = THREE.SRGBColorSpace;
-  botanicalTextureCache.set(res, texture);
+  chevronTextureCache.set(res, texture);
   return texture;
 }
 
@@ -960,6 +782,9 @@ const CornerGoldRingChandelier: React.FC<CornerGoldRingChandelierProps> = ({ pos
         <mesh
           position={[0, 7.95, 0]}
           geometry={cornerChandelierStatic.hitSphereGeo}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+          }}
           onClick={(e) => {
             e.stopPropagation();
             isAnimatingRef.current = true;
@@ -1003,14 +828,14 @@ const CornerGoldRingChandelier: React.FC<CornerGoldRingChandelierProps> = ({ pos
 };
 
 // ==================================================================================
-// ARCHITECTURAL WALL FEATURE (36m width x 16.8m height; botanical wallpaper ONLY on
+// ARCHITECTURAL WALL FEATURE (36m width x 16.8m height; chevron-arrow wallpaper ONLY on
 // the 8 empty flanking background wall bays outside the [-5.25, +5.25] central bay)
 // ==================================================================================
 const wallArchStatic = typeof document !== 'undefined' ? (() => {
-  const botanicalTex = getBotanicalWallpaperTexture();
+  const arrowTex = getChevronWallpaperTexture();
   const wallMat = new THREE.MeshStandardMaterial({
-    color: botanicalTex ? '#ffffff' : '#ebe6de',
-    map: botanicalTex || undefined,
+    color: arrowTex ? '#ffffff' : '#EDE9E1',
+    map: arrowTex || undefined,
     roughness: 0.84,
     metalness: 0.0,
   });
@@ -1027,7 +852,7 @@ const wallArchStatic = typeof document !== 'undefined' ? (() => {
   const wingPlane = new THREE.PlaneGeometry(wingWidth, ROOM_HEIGHT);
   const uvAttr = wingPlane.getAttribute('uv');
   for (let i = 0; i < uvAttr.count; i++) {
-    uvAttr.setXY(i, uvAttr.getX(i) * 2.0, uvAttr.getY(i) * 3.0);
+    uvAttr.setXY(i, uvAttr.getX(i) * 3.0, uvAttr.getY(i) * 4.0);
   }
   uvAttr.needsUpdate = true;
 
